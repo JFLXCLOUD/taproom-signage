@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leanback launcher banner: 320x180. Deliberately flat vector, no raster assets. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#0B0E13" android:pathData="M0,0h320v180h-320z"/>
+    <path android:fillColor="#E8B04B"
+        android:pathData="M108,44h56l-6,84a17,17 0 0,1 -17,16h-11a17,17 0 0,1 -17,-16z"/>
+    <path android:strokeColor="#E8B04B" android:strokeWidth="9" android:fillColor="#00000000"
+        android:pathData="M166,62h14a14,14 0 0,1 0,28h-14"/>
+    <path android:fillColor="#E8B04B" android:pathData="M119,152h34v10h-34z"/>
+    <path android:fillColor="#93A1B3" android:pathData="M196,80h96v8h-96z"/>
+    <path android:fillColor="#93A1B3" android:pathData="M196,98h72v8h-72z"/>
+</vector>

@@ -78,8 +78,11 @@ is that the Pi has to physically live at that TV.
 | --- | --- | --- |
 | Fire TV Stick HD | $25 | The cheapest model is fine — it renders one static page |
 
-Needs [Fully Kiosk Browser](https://www.fully-kiosk.com/) sideloaded and preconfigured
-(see below). Requires an Amazon account on the device.
+Runs the app in [`firetv/`](firetv/), which finds the server on the LAN by itself and
+starts on boot — nothing to configure on the TV. Requires an Amazon account on the
+device to enable ADB for the one-time sideload. [Fully Kiosk
+Browser](https://www.fully-kiosk.com/) remains a no-build alternative if you would
+rather not compile anything.
 
 **(c) Raspberry Pi Zero 2 W as a dedicated player — ~$30 per screen**
 
@@ -117,6 +120,7 @@ This is the whole setup card. No addresses, no passwords to invent, no router ac
 > 4. Sign in with the password on the sticker. Tap **Add to Home Screen**.
 >
 > *Extra TVs:* plug in the black stick, join the same Wi-Fi, open the **Menu** app.
+> It finds the menu by itself and shows a code to pair from your phone.
 
 Step 3 works because of a captive portal: phones and tablets probe a known URL when they
 join a network, and the Pi answers that probe with a redirect to the admin app. Same
@@ -227,11 +231,28 @@ Per stick, once, before it ships:
 
 1. Sign in to Amazon, connect to the `RCYC Signage` network.
 2. Settings → My Fire TV → Developer Options → **ADB debugging on**.
-3. `adb connect <stick ip>` then `adb install fully-kiosk.apk`.
-4. In Fully Kiosk set: **Start URL** `http://menu`, **Kiosk Mode on**, **Start on Boot
-   on**, **Keep Screen On on**, **Reload on connection error on**.
-5. Settings → Display & Sounds → Screensaver → **Start After: Never**. This one is not
-   optional — the app requests a wake lock but Silk ignores it.
+3. Build and install the app:
+   ```bash
+   cd firetv && ./gradlew assembleDebug
+   adb connect <stick ip>
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+4. Settings → Display & Sounds → Screensaver → **Start After: Never**. Not optional —
+   the app holds a screen-on flag but the Fire TV screensaver overrides it.
+
+That is the whole stick setup. **No URL is entered anywhere**: the app broadcasts for
+the server, and a server that moves is re-found automatically. See
+[`firetv/README.md`](firetv/README.md) for the discovery protocol and the two items
+that still need a device to settle (boot auto-start, WebView version).
+
+Because discovery is a UDP broadcast, the stick and the Pi must share a broadcast
+domain — which they do on the Pi's own access point. If you put them on separate VLANs
+instead, the app falls back to sweeping the local /24, and if that is also blocked you
+can type an address once via the MENU button.
+
+**No-build alternative:** sideload Fully Kiosk Browser instead and set **Start URL**
+`http://menu`, **Kiosk Mode**, **Start on Boot**, **Keep Screen On**, and **Reload on
+connection error**. That relies on the Pi's wildcard DNS rather than discovery.
 
 ---
 

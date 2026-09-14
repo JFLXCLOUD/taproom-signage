@@ -8,6 +8,7 @@ import * as store from './db.js';
 import { json, text, sendFile, mimeFor } from './http.js';
 import { UPLOAD_DIR } from './db.js';
 import { maybeSeed } from './seed.js';
+import { startDiscovery } from './discovery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -38,9 +39,17 @@ const PROBE_PATHS = new Set([
 
 // ------------------------------------------------------------------ routes
 
+/** Health is public, so it must never throw on a half-initialised database. */
+function safeVenueName() {
+  try { return store.getSettings().venue_name; } catch { return 'Taproom'; }
+}
+
 /** [method, path pattern, handler, requiresAuth] — :params become named groups. */
 const routes = [
-  ['GET',    '/api/health',            (q, s) => json(s, 200, { ok: true, revision: store.getRevision(), displays: api.clientCount() }), false],
+  ['GET',    '/api/health',            (q, s) => json(s, 200, {
+    ok: true, app: 'taproom-signage', name: safeVenueName(),
+    revision: store.getRevision(), displays: api.clientCount()
+  }), false],
   ['GET',    '/api/events',            api.handleEvents,   false],
   ['GET',    '/api/revision',          api.getRevision,    false],
 
@@ -169,6 +178,12 @@ store.purgeSessions();
 setInterval(() => store.purgeSessions(), 1000 * 60 * 60).unref();
 
 maybeSeed();
+
+// Answer LAN discovery probes so the Fire TV app can find this box unaided.
+startDiscovery({
+  httpPort: PORT,
+  venueName: () => { try { return store.getSettings().venue_name; } catch { return 'Taproom'; } }
+});
 
 server.listen(PORT, HOST, () => {
   const pw = process.env.ADMIN_PASSWORD;

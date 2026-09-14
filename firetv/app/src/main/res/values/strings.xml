@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Menu</string>
+    <string name="searching">Looking for the menu server…</string>
+    <string name="not_found">No menu server found on this network.\n\nCheck the server is switched on, then press MENU on the remote to enter its address.</string>
+    <string name="cannot_reach">Cannot reach %1$s\n(%2$s)\n\nRetrying…</string>
+    <string name="menu_title">Menu display</string>
+    <string name="menu_current">Server: %1$s</string>
+    <string name="menu_search">Search again</string>
+    <string name="menu_manual">Enter address</string>
+    <string name="menu_reload">Reload</string>
+    <string name="manual_title">Server address</string>
+    <string name="none">not set</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+</resources>

@@ -6,3 +6,11 @@ data/
 .env
 .DS_Store
 Thumbs.db
+
+# Android
+firetv/.gradle/
+firetv/build/
+firetv/app/build/
+firetv/local.properties
+firetv/.idea/
+*.apk

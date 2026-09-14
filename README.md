@@ -152,6 +152,7 @@ so `MKT` or `8/12` work as typed.
 | `DATA_DIR` | `./data` | SQLite db + uploaded images. |
 | `SEED_DEMO` | `1` | `0` starts with no boards. |
 | `TZ` | system | Affects the on-screen clock. |
+| `DISCOVERY` | `1` | `0` switches off the UDP discovery responder the Fire TV app uses. |
 | `CAPTIVE_PORTAL` | `0` | `1` redirects OS connectivity probes to the admin app. Only for the Pi-as-access-point build — see [HARDWARE.md](HARDWARE.md). |
 
 Display endpoints (`/d/:slug`, `/p/:slug`, `/api/board/:slug`, `/api/playlist/:slug`,
@@ -201,6 +202,15 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
   instead of snapping back to the first one.
 - **The service worker never caches `/api/`.** A bartender marking a keg kicked has to see the
   truth, not a cached copy.
+
+## Fire TV app
+
+[`firetv/`](firetv/) holds a native Fire TV kiosk app: it finds this server on the LAN
+by itself, remembers it, and restarts on boot — no address is ever typed into a TV.
+`npm run find` runs the same discovery handshake from your laptop, and
+`npm run check:firetv` asserts the app and server halves of the protocol still agree.
+
+The app source has not been compiled or run on hardware; see its README.
 
 ## Backup
 

@@ -9,6 +9,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed": "node src/seed.js",
-    "verify:qr": "node scripts/verify-qr.mjs"
+    "verify:qr": "node scripts/verify-qr.mjs",
+    "check:firetv": "node scripts/check-firetv.mjs",
+    "find": "node scripts/find-server.mjs"
   }
 }
