@@ -73,7 +73,9 @@ body {
 .head-logo {
   height: 8.5rem;
   width: auto;
-  max-width: 26rem;
+  /* A share of the header rather than a fixed rem width, so a tall portrait
+     board does not hand a quarter of its header to the logo. */
+  max-width: 22%;
   object-fit: contain;
   flex: 0 0 auto;
 }
@@ -86,11 +88,11 @@ body {
   text-transform: var(--heading-transform, uppercase);
   letter-spacing: var(--tracking, 0.01em);
   font-size: 5.4rem;
-  line-height: 1;
+  line-height: 1.04;
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Never clipped. A long venue name wraps, and display.js scales it down to
+     fit - "Richmond County Yacht Club" has to read in full on the wall. */
+  overflow-wrap: anywhere;
 }
 
 .head-tagline {
@@ -101,7 +103,9 @@ body {
 }
 
 .head-right {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
   text-align: right;
   display: flex;
   flex-direction: column;
@@ -115,13 +119,18 @@ body {
   font-size: 3.6rem;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
+/* Secondary to the venue name, so it yields space first - but it wraps rather
+   than truncating, because "MAIN B..." just looks broken. */
 .head-board {
   font-size: 1.9rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.14em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------------ stage */
@@ -548,6 +557,7 @@ body {
   color: var(--accent);
 }
 
+/* Same rule as the venue name: scaled by display.js, never truncated. */
 .poster-headline {
   font-family: var(--font-heading);
   font-weight: var(--heading-weight, 700);

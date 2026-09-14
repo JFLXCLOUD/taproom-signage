@@ -590,6 +590,7 @@ function renderPoster(scene) {
   if (text.childNodes.length) poster.appendChild(text);
 
   app.appendChild(poster);
+  fitHeading(poster.querySelector('.poster-headline'), 11, 3.4, 3);
 }
 
 // ------------------------------------------------------------------ render
@@ -671,6 +672,10 @@ async function waitForFonts(theme) {
 function layout(data, stage, theme, attempt) {
   attempt = attempt || 0;
   const currency = data.venue?.currency || '$';
+
+  // Fit the header before measuring the stage: shrinking the venue name onto
+  // one line (or growing it onto two) changes how much height is left below.
+  fitHeading(app.querySelector('.head-venue'), 5.4, 2.4, 2);
 
   const blocks = [];
   const useHeaders = (data.sections || []).length > 1 ||
@@ -781,6 +786,57 @@ function renderMessage(title, body) {
   app.className = '';
   app.textContent = '';
   app.appendChild(centerCard(title, body));
+}
+
+/**
+ * Scale a heading down until it fits its box, wrapping up to `maxLines`.
+ *
+ * Truncating is not an option here: a venue name is the one thing on the board
+ * that must always read in full, so it wraps first and then scales rather than
+ * ellipsing. Binary search over the font size costs a handful of reflows and
+ * only runs when the board is (re)laid out.
+ */
+function fitHeading(node, maxRem, minRem, maxLines) {
+  if (!node || !node.isConnected || !node.textContent.trim()) return;
+
+  const fitsAt = (sizeRem) => {
+    node.style.fontSize = sizeRem + 'rem';
+    return node.scrollWidth <= node.clientWidth + 1 && countLines(node) <= maxLines;
+  };
+
+  if (fitsAt(maxRem)) return;
+
+  let lo = minRem;
+  let hi = maxRem;
+  let best = minRem;
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    if (fitsAt(mid)) { best = mid; lo = mid; } else { hi = mid; }
+  }
+  // Even at the floor it may need a third line; that is fine. Growing the
+  // header is always better than hiding part of the name.
+  node.style.fontSize = best.toFixed(2) + 'rem';
+}
+
+/**
+ * Line count for a heading holding a single run of text.
+ *
+ * Not scrollHeight/lineHeight: a big condensed uppercase face paints outside
+ * its line box, so that ratio reports a phantom extra line and the text gets
+ * shrunk until it is all on one line. Range rects are the real line boxes, and
+ * counting them works just as well when the board is rotated for portrait.
+ */
+function countLines(node) {
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const rects = range.getClientRects();
+    if (rects.length) return rects.length;
+  } catch { /* fall through */ }
+
+  const lineHeight = parseFloat(getComputedStyle(node).lineHeight);
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
+  return Math.max(1, Math.round(node.scrollHeight / lineHeight));
 }
 
 // ------------------------------------------------------------------ chrome

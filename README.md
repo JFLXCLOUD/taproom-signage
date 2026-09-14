@@ -180,6 +180,11 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
 - **`1rem` = 1% of the panel's short edge**, in portrait too, so one design fits 720p, 1080p and
   4K with no media queries and rotating a screen does not magnify the text. The *Text size*
   slider scales that unit.
+- **The venue name is never truncated.** It wraps to two lines, and if it still does not fit,
+  `fitHeading()` binary-searches the largest font size that does. Line boxes are counted with
+  Range rects, not `scrollHeight / lineHeight` - a big condensed uppercase face paints outside
+  its line box, so that ratio reports a phantom extra line and shrinks the name for no reason.
+  Poster headlines use the same fitter (up to three lines).
 - **Icons are inline SVG** on a 24x24 grid, stroked in `currentColor` (`public/admin/icons.js`).
   No icon font, no CDN: the PWA has to work on venue wifi with no internet.
 - **Images are downscaled in the browser** before upload, so a 12MP phone photo never reaches
