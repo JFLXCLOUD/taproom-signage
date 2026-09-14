@@ -113,6 +113,7 @@ This is the whole setup card. No addresses, no passwords to invent, no router ac
 >    *The menu appears.*
 > 3. To edit the menu, on your phone join the Wi-Fi network **`RCYC Signage`**
 >    (password on the sticker). Your phone will open the menu editor by itself.
+>    *Or just point your phone camera at the QR code on the TV.*
 > 4. Sign in with the password on the sticker. Tap **Add to Home Screen**.
 >
 > *Extra TVs:* plug in the black stick, join the same Wi-Fi, open the **Menu** app.
@@ -189,6 +190,37 @@ IP forwarding and NAT from `wlan0` to `eth0`, and the Fire TV Sticks get interne
 > **ethernet** for the uplink, or accept that the signage network has no internet — the
 > app does not need it.
 
+### Remote support with Tailscale
+
+Without this, a misbehaving venue is a drive. With it, it is a five-minute fix.
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up   --authkey tskey-auth-XXXX   --hostname rcyc-signage   --advertise-tags=tag:signage   --advertise-routes=10.42.0.0/24   --ssh
+```
+
+- **Use a reusable, pre-authorised auth key with a tag.** That is what makes it
+  unattended — nobody at the venue ever logs in to anything. Tagged nodes also have
+  key expiry disabled by default, so the box does not silently drop off your tailnet
+  in ninety days.
+- **MagicDNS** then gets you `http://rcyc-signage` from any of your own devices.
+- `--ssh` gives you Tailscale SSH for shell access without opening port 22.
+- `--advertise-routes=10.42.0.0/24` (accept it in the admin console) puts the Pi's own
+  Wi-Fi subnet on your tailnet, so you can reach the Fire TV Sticks too — worth it when
+  a stick has wandered off and you want to see what it is showing.
+
+**It needs the ethernet uplink.** Tailscale rides the venue's internet; on an AP-only
+box with no uplink there is no remote support. That is a reason to plug in the cable
+even when you do not need internet passthrough.
+
+**Do not enable Tailscale Funnel.** Funnel publishes the box on the public internet,
+which is exactly what this design avoids. Tailscale alone keeps it private to your
+tailnet.
+
+> Once the box is reachable from your tailnet, `ADMIN_PASSWORD` is the only thing
+> between a tailnet user and the menu. Set a real one per venue, and use ACLs so the
+> `tag:signage` nodes cannot reach each other.
+
 ### Fire TV Stick image
 
 Per stick, once, before it ships:
@@ -220,11 +252,5 @@ Per stick, once, before it ships:
 ## Open questions to settle before shipping
 
 1. **Pi Zero 2 W as a player** — does Chromium hold 1080p acceptably on 512MB? Untested.
-2. **A QR code on the pairing screen** would cover the case where the phone stays on
-   venue Wi-Fi instead of joining the Pi's network — scan the screen, land in the admin.
-   Needs a QR encoder written into the app (no CDN available), roughly 200-300 lines.
-3. **Remote support** — a Tailscale client on the Pi would let you fix a venue without
-   driving there. Adds a dependency and an account, but it is the difference between a
-   five-minute fix and a site visit.
-4. **Fire TV alternatives** — an Android TV box with a preinstalled kiosk browser avoids
+2. **Fire TV alternatives** — an Android TV box with a preinstalled kiosk browser avoids
    the Amazon account entirely and may be cheaper in volume.

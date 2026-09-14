@@ -155,12 +155,17 @@ export function resolveDevice(req, res, { id }) {
   if (!device) return json(res, 404, { error: 'Unknown device' });
   store.touchDevice(id);
 
-  const unpaired = () => json(res, 200, {
-    paired: false,
-    code: device.code,
-    device: { id: device.id, name: device.name },
-    revision: store.getRevision()
-  });
+  const unpaired = () => {
+    const settings = store.getSettings();
+    return json(res, 200, {
+      paired: false,
+      code: device.code,
+      device: { id: device.id, name: device.name },
+      venue: { name: settings.venue_name, logo: settings.logo },
+      theme: resolveTheme(settings.theme, {}),
+      revision: store.getRevision()
+    });
+  };
 
   const who = { id: device.id, name: device.name };
 

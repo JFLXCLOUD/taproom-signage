@@ -186,6 +186,11 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
   Range rects, not `scrollHeight / lineHeight` - a big condensed uppercase face paints outside
   its line box, so that ratio reports a phantom extra line and shrinks the name for no reason.
   Poster headlines use the same fitter (up to three lines).
+- **The pairing screen shows a QR code.** Scanning it opens the control app with the
+  pairing code already filled in, so nobody reads an address off a TV and types it on a
+  phone. The QR encoder is written into the app (`public/shared/qr.js`) because there is
+  no CDN to reach on a venue network; `npm run verify:qr` checks it against python-qrcode
+  and round-trips every symbol through OpenCV's decoder.
 - **Icons are inline SVG** on a 24x24 grid, stroked in `currentColor` (`public/admin/icons.js`).
   No icon font, no CDN: the PWA has to work on venue wifi with no internet.
 - **Images are downscaled in the browser** before upload, so a 12MP phone photo never reaches

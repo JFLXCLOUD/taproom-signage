@@ -69,12 +69,26 @@ export const api = {
 
 // ------------------------------------------------------------------ store
 
+// Captured once at load: scanning the QR on a display lands here as ?pair=CODE.
+// Read before the URL is tidied so it survives the sign-in round trip.
+const scannedPair = (() => {
+  try {
+    const code = new URLSearchParams(location.search).get('pair');
+    if (!code) return null;
+    history.replaceState(null, '', location.pathname);
+    return code.toUpperCase().slice(0, 6);
+  } catch {
+    return null;
+  }
+})();
+
 export const store = {
+  pairCode: scannedPair,
   authed: false,
   defaultPassword: false,
   loading: true,
   connected: false,
-  tab: 'menu',
+  tab: scannedPair ? 'screens' : 'menu',
   boardId: null,
   state: { settings: {}, boards: [], devices: [], revision: 0 }
 };

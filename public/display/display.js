@@ -1,4 +1,5 @@
-import { themeToCssVars, webfontHref, webfontFamilies, rotationFor, STATUSES } from '../shared/theme.js';
+import { themeToCssVars, webfontHref, webfontFamilies, rotationFor, resolveTheme, STATUSES } from '../shared/theme.js';
+import { qrSvg } from '../shared/qr.js';
 
 const app = document.getElementById('app');
 const CACHE_KEY = 'signage.lastPayload';
@@ -166,7 +167,10 @@ function flashIdentify() {
 
 function applyTheme(theme) {
   const root = document.documentElement;
-  const vars = themeToCssVars(theme);
+  // Fill any gaps from the defaults first. A partial theme (or none at all, as
+  // on the pairing screen) would otherwise write "undefined" into the custom
+  // properties, which CSS discards - leaving black text on a black board.
+  const vars = themeToCssVars(resolveTheme({}, theme || {}));
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
 
   applyRotation(theme);
@@ -771,11 +775,31 @@ function renderPairing(data) {
   app.className = '';
   app.textContent = '';
   applyRotation(data.theme || {});
+  const code = data.code || '······';
   const box = el('div', 'center');
   box.appendChild(el('h1', null, 'Pair this screen'));
-  box.appendChild(el('p', null, 'Open the control app on your phone, go to Screens, and enter this code.'));
-  box.appendChild(el('div', 'pair-code', data.code || '······'));
-  box.appendChild(el('small', null, location.host));
+
+  const row = el('div', 'pair-row');
+
+  // The QR carries the pairing code, so scanning it opens the control app with
+  // the code already filled in — no address to read off the screen and type.
+  try {
+    const holder = el('div', 'pair-qr');
+    holder.appendChild(qrSvg(`${location.origin}/?pair=${encodeURIComponent(code)}`, { level: 'M' }));
+    row.appendChild(holder);
+  } catch (err) {
+    console.warn('QR unavailable', err);
+  }
+
+  const side = el('div', 'pair-side');
+  side.appendChild(el('p', null, 'Scan with your phone camera'));
+  side.appendChild(el('div', 'pair-or', 'or open'));
+  side.appendChild(el('div', 'pair-host', location.host));
+  side.appendChild(el('div', 'pair-or', 'and enter this code'));
+  side.appendChild(el('div', 'pair-code', code));
+  row.appendChild(side);
+
+  box.appendChild(row);
   app.appendChild(box);
   pages = [];
   clearInterval(rotateTimer);

@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "verify:qr": "node scripts/verify-qr.mjs"
   }
 }

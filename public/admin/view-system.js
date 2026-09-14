@@ -14,8 +14,10 @@ export function renderScreens() {
       h('div.card-head', h('h2', 'Pair a screen')),
       h('div.card-body',
         h('p.hint', { style: { marginTop: '0' } },
-          'On the TV, open ', h('strong', location.host + '/display'),
-          ' in the browser. It will show a six-character code — type it here.'),
+          store.pairCode
+          ? h('span', 'Code scanned from the screen. Pick what it should show, then pair it.')
+          : h('span', 'On the TV, open ', h('strong', location.host + '/display'),
+              ' in the browser. Scan the QR code it shows, or type its six-character code here.')),
         pairForm(boards))),
 
     rotationsCard(),
@@ -212,9 +214,11 @@ function sceneRow(playlist, item, index, total) {
 
 function pairForm(boards) {
   const code = h('input.input.code-box', {
-    placeholder: '······', maxlength: '6', autocapitalize: 'characters', autocomplete: 'off'
+    placeholder: '······', maxlength: '6', autocapitalize: 'characters', autocomplete: 'off',
+    value: store.pairCode || ''
   });
-  const boardSel = select('', targetOptions());
+  // Default to the first board so a scanned screen is one tap from live.
+  const boardSel = select(boards[0] ? 'b:' + boards[0].id : '', targetOptions());
   const name = h('input.input', { placeholder: 'e.g. Behind the bar' });
 
   return h('div',
@@ -229,7 +233,7 @@ function pairForm(boards) {
           () => api.post('/api/devices/claim',
             { code: value, ...targetPayload(boardSel.value), name: name.value.trim() || 'Screen' }),
           'Screen paired');
-        if (ok) { code.value = ''; name.value = ''; }
+        if (ok) { code.value = ''; name.value = ''; store.pairCode = null; }
       }
     }, 'Pair screen'));
 }
