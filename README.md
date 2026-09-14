@@ -13,6 +13,9 @@ phone app. Changes appear on every screen in well under a second.
 
 ---
 
+**Running a trial?** [TRIAL.md](TRIAL.md) is the step-by-step for one Windows PC and one
+Fire TV Stick, including the firewall prompt that otherwise makes it look broken.
+
 ## Quick start
 
 ```bash
