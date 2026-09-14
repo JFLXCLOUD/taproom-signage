@@ -1,0 +1,21 @@
+services:
+  signage:
+    build: .
+    # image: taproom-signage        # uncomment if you push it to a registry
+    container_name: taproom-signage
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # CHANGE THIS before putting the app anywhere but your own LAN.
+      ADMIN_PASSWORD: "changeme"
+      PORT: "8080"
+      DATA_DIR: "/data"
+      # Set to 0 to start with an empty menu instead of the demo taps.
+      SEED_DEMO: "1"
+      TZ: "America/New_York"
+    volumes:
+      - signage-data:/data
+
+volumes:
+  signage-data:
