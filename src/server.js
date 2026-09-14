@@ -1,7 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 
 import * as api from './api.js';
 import * as store from './db.js';
@@ -179,19 +179,65 @@ setInterval(() => store.purgeSessions(), 1000 * 60 * 60).unref();
 
 maybeSeed();
 
-// Answer LAN discovery probes so the Fire TV app can find this box unaided.
-startDiscovery({
-  httpPort: PORT,
-  venueName: () => { try { return store.getSettings().venue_name; } catch { return 'Taproom'; } }
-});
+/**
+ * Bind, stepping to the next port if this one is taken or reserved.
+ *
+ * Windows reserves whole port ranges (Hyper-V and WinNAT do this), so a fixed
+ * 8080 fails outright on plenty of machines with EACCES rather than EADDRINUSE.
+ * Drifting the port is safe here because nothing hard-codes it: screens find the
+ * server over UDP discovery, which advertises whatever port we actually got.
+ */
+function listenWithFallback(startPort, attemptsLeft) {
+  // Both listeners must come off before retrying. Leaving the 'listening' one
+  // attached means the failed attempt's callback also fires when a later port
+  // succeeds - which announced two ports and had discovery advertising the dead
+  // one, so screens could be handed a port nothing is listening on.
+  const cleanup = () => {
+    server.removeListener('error', onError);
+    server.removeListener('listening', onOk);
+  };
 
-server.listen(PORT, HOST, () => {
+  const onError = (err) => {
+    cleanup();
+    const recoverable = err.code === 'EADDRINUSE' || err.code === 'EACCES';
+    if (!recoverable || attemptsLeft <= 0) {
+      console.error(`  Cannot listen on port ${startPort}: ${err.code || err.message}`);
+      process.exit(1);
+    }
+    console.log(`  Port ${startPort} unavailable (${err.code}); trying ${startPort + 1}`);
+    listenWithFallback(startPort + 1, attemptsLeft - 1);
+  };
+
+  const onOk = () => {
+    cleanup();
+    onListening(startPort);
+  };
+
+  server.once('error', onError);
+  server.once('listening', onOk);
+  server.listen(startPort, HOST);
+}
+
+function onListening(port) {
+  // The launcher reads this to know where to point "Open control app".
+  try {
+    writeFileSync(path.join(store.DATA_DIR, 'port'), String(port));
+  } catch (err) {
+    console.warn(`  Could not record the port: ${err.message}`);
+  }
+
+  // Announce the port we actually got, not the one we asked for.
+  startDiscovery({
+    httpPort: port,
+    venueName: () => { try { return store.getSettings().venue_name; } catch { return 'Taproom'; } }
+  });
+
   const pw = process.env.ADMIN_PASSWORD;
   console.log('');
   console.log('  Taproom Signage');
   console.log('  ───────────────────────────────────────────');
-  console.log(`  Admin PWA   http://localhost:${PORT}/`);
-  console.log(`  Display     http://localhost:${PORT}/display`);
+  console.log(`  Admin PWA   http://localhost:${port}/`);
+  console.log(`  Display     http://localhost:${port}/display`);
   console.log(`  Data dir    ${store.DATA_DIR}`);
   if (CAPTIVE_PORTAL) console.log('  Captive portal ON (probe URLs redirect to the admin app)');
   if (!pw || pw === 'changeme') {
@@ -200,7 +246,9 @@ server.listen(PORT, HOST, () => {
     console.log('     Set it before exposing this beyond your LAN.');
   }
   console.log('');
-});
+}
+
+listenWithFallback(PORT, 10);
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

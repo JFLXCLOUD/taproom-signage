@@ -33,6 +33,20 @@ Default password is `changeme`. The app warns you until you change it.
 The first run seeds a demo board (10 taps, cocktails, a food section) so there is something
 real on screen. Set `SEED_DEMO=0` to start empty.
 
+### Windows (no install)
+
+Download `TaproomSignage-win-x64.zip` from the
+[Releases page](https://github.com/JFLXCLOUD/taproom-signage/releases), unzip it
+anywhere, and run `TaproomSignage.exe`. Node is bundled — nothing to install.
+
+A tray icon appears near the clock. Right-click it for the control app, the display,
+settings, the log, and a **Start with Windows** toggle so the server returns after a
+reboot. If the server ever dies the launcher restarts it with a backoff.
+
+The port lives in `taproom.config` (default 8099). If it is taken or reserved — Windows
+reserves whole ranges, so even 8080 fails on some machines — the server steps to the
+next free port and tells you. Screens do not care: they find the server over UDP.
+
 ### Docker
 
 ```bash

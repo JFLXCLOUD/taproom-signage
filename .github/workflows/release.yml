@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Fire TV APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: assembleDebug
+        working-directory: firetv
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Name it properly
+        run: |
+          mkdir -p out
+          cp firetv/app/build/outputs/apk/debug/app-debug.apk out/TaproomSignage-firetv.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/TaproomSignage-firetv.apk
+
+  windows:
+    name: Windows server package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build portable package
+        run: node scripts/build-windows.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/TaproomSignage-win-x64.zip
+
+  publish:
+    name: Publish release
+    needs: [apk, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            assets/apk/TaproomSignage-firetv.apk
+            assets/windows/TaproomSignage-win-x64.zip

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Server checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Boot the server and probe it
+        run: |
+          PORT=8123 SEED_DEMO=1 DATA_DIR=./ci-data node src/server.js &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8123/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8123/api/health | tee /dev/stderr | grep -q 'taproom-signage'
+          curl -sf -o /dev/null -w 'display %{http_code}\n' http://127.0.0.1:8123/d/main
+          curl -sf -o /dev/null -w 'admin   %{http_code}\n' http://127.0.0.1:8123/
+
+      - name: QR encoder
+        run: |
+          python -m pip install --quiet qrcode opencv-python-headless numpy
+          npm run verify:qr
+
+      - name: Fire TV app static checks
+        run: npm run check:firetv
+
+  android:
+    name: Build Fire TV APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: assembleDebug
+        working-directory: firetv
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taproom-signage-firetv-apk
+          path: firetv/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

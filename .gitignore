@@ -14,3 +14,4 @@ firetv/app/build/
 firetv/local.properties
 firetv/.idea/
 *.apk
+dist/
