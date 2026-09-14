@@ -2,6 +2,7 @@ import {
   h, clear, api, store, subscribe, emit, refreshState, connectLive,
   currentBoard, toast, field
 } from './core.js';
+import { icon } from './icons.js';
 import { renderMenu } from './view-menu.js';
 import { renderDesign } from './view-design.js';
 import { renderScreens, renderSettings } from './view-system.js';
@@ -9,10 +10,10 @@ import { renderScreens, renderSettings } from './view-system.js';
 const root = document.getElementById('root');
 
 const TABS = [
-  ['menu', 'Menu', '🍺'],
-  ['design', 'Design', '🎨'],
-  ['screens', 'Screens', '📺'],
-  ['settings', 'Settings', '⚙️']
+  ['menu', 'Menu', 'list'],
+  ['design', 'Design', 'droplet'],
+  ['screens', 'Screens', 'monitor'],
+  ['settings', 'Settings', 'sliders']
 ];
 
 // ------------------------------------------------------------------ shell
@@ -36,10 +37,10 @@ function render() {
         h('h1', store.state.settings?.venue_name || 'Taproom Signage'),
         h('span.live' + (store.connected ? '' : '.off'), store.connected ? 'Live' : 'Offline')),
       h('div.shell', viewFor(store.tab)),
-      h('nav.tabs', ...TABS.map(([key, label, icon]) =>
+      h('nav.tabs', ...TABS.map(([key, label, iconName]) =>
         h('button' + (store.tab === key ? '.on' : ''), {
           onclick: () => { store.tab = key; emit(); window.scrollTo(0, 0); }
-        }, h('span.ico', icon), label)))));
+        }, h('span.ico', icon(iconName, 22)), label)))));
 }
 
 function viewFor(tab) {

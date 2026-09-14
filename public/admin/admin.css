@@ -106,7 +106,12 @@ a { color: var(--accent); }
   letter-spacing: 0.03em;
 }
 .tabs button.on { color: var(--accent); }
-.tabs .ico { font-size: 19px; line-height: 1; }
+.tabs .ico { display: flex; line-height: 0; }
+
+/* Icons are inline SVG inheriting currentColor, so they follow button state. */
+svg { flex: 0 0 auto; display: block; }
+.btn svg { margin-right: -2px; }
+.item-grab button svg { margin: 0; }
 
 /* ------------------------------------------------------------------ cards */
 

@@ -1,6 +1,7 @@
 import {
   h, api, store, mutate, sheet, confirmSheet, field, input, select, toast, uploadImage, refreshState
 } from './core.js';
+import { icon } from './icons.js';
 
 // ================================================================== screens
 
@@ -27,7 +28,7 @@ export function renderScreens() {
     devices.length
       ? h('button.btn.btn-block', { style: { marginTop: '12px' },
           onclick: () => mutate(() => api.post('/api/devices/command', { action: 'reload' }),
-            'Reload sent to every screen') }, 'Reload all screens')
+            'Reload sent to every screen') }, icon('refresh', 17), 'Reload all screens')
       : null,
 
     h('div.section-title', 'Direct links'),
@@ -109,7 +110,8 @@ function rotationsCard() {
         : h('div.empty',
             h('p', 'A rotation cycles through boards — menu for two minutes, then an event poster, then back.')),
       h('div.card-body',
-        h('button.btn.btn-block.btn-sm', { onclick: newRotation }, '+ New rotation'))));
+        h('button.btn.btn-block.btn-sm', { onclick: newRotation },
+          icon('plus', 17), 'New rotation'))));
 }
 
 function newRotation() {
@@ -194,15 +196,18 @@ function sceneRow(playlist, item, index, total) {
 
   return h('div.item', { style: { paddingLeft: '0', paddingRight: '0' } },
     h('div.item-grab',
-      h('button', { onclick: () => move(-1), disabled: index === 0 }, '▲'),
-      h('button', { onclick: () => move(1), disabled: index === total - 1 }, '▼')),
+      h('button', { onclick: () => move(-1), disabled: index === 0, 'aria-label': 'Move up' },
+        icon('chevronUp', 14)),
+      h('button', { onclick: () => move(1), disabled: index === total - 1, 'aria-label': 'Move down' },
+        icon('chevronDown', 14))),
     h('div.item-main',
       h('div.item-name', item.board_name),
       h('div.item-sub', item.board_layout === 'poster' ? 'Poster' : 'Menu board')),
     h('div', { style: { width: '84px' } }, secs),
     h('button.btn.btn-sm.btn-danger', {
+      'aria-label': 'Remove scene',
       onclick: () => mutate(() => api.del('/api/scenes/' + item.id), 'Scene removed')
-    }, '✕'));
+    }, icon('x', 15)));
 }
 
 function pairForm(boards) {
@@ -254,11 +259,11 @@ function editDevice(device, boards) {
         h('button.btn.btn-sm', {
           onclick: () => mutate(() => api.post('/api/devices/command',
             { action: 'identify', deviceId: device.id }), 'Identifying')
-        }, 'Identify'),
+        }, icon('monitor', 15), 'Identify'),
         h('button.btn.btn-sm', {
           onclick: () => mutate(() => api.post('/api/devices/command',
             { action: 'reload', deviceId: device.id }), 'Reloading')
-        }, 'Reload'))),
+        }, icon('refresh', 15), 'Reload'))),
     extra: h('button.btn.btn-danger.btn-sm', {
       onclick: async () => {
         const ok = await confirmSheet('Unpair screen?',
@@ -318,11 +323,11 @@ export function renderSettings() {
                   if (id) await mutate(() => api.post('/api/settings', { logo: id }), 'Logo updated');
                 } catch (err) { toast(err.message, true); }
               }
-            }, s.logo ? 'Replace logo' : 'Upload logo'),
+            }, icon('upload', 15), s.logo ? 'Replace logo' : 'Upload logo'),
             s.logo
               ? h('button.btn.btn-sm.btn-danger', {
                   onclick: () => mutate(() => api.post('/api/settings', { logo: null }), 'Logo removed')
-                }, 'Remove')
+                }, icon('trash', 15), 'Remove')
               : null)),
           'A wide PNG with a transparent background works best.'),
         h('button.btn.btn-primary.btn-block', {
@@ -337,8 +342,10 @@ export function renderSettings() {
       h('div.card-head', h('h2', 'Backup')),
       h('div.card-body',
         h('div.row-btns',
-          h('a.btn.btn-sm', { href: '/api/export', download: '' }, 'Download backup'),
-          h('button.btn.btn-sm', { onclick: importBackup }, 'Restore from file')),
+          h('a.btn.btn-sm', { href: '/api/export', download: '' },
+            icon('upload', 15), 'Download backup'),
+          h('button.btn.btn-sm', { onclick: importBackup },
+            icon('refresh', 15), 'Restore from file')),
         h('div.hint', 'The backup holds every board, section, item and price as JSON. Images are not included.'))),
 
     h('div.card',
@@ -352,7 +359,8 @@ export function renderSettings() {
         h('div.hint', 'The board keeps showing its last menu even if this server goes offline.'))),
 
     h('button.btn.btn-block', { style: { marginTop: '16px' },
-      onclick: async () => { await api.post('/api/auth/logout'); location.reload(); } }, 'Sign out'));
+      onclick: async () => { await api.post('/api/auth/logout'); location.reload(); } },
+      icon('power', 17), 'Sign out'));
 }
 
 function importBackup() {

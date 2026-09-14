@@ -166,10 +166,22 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
   browser is asked whether the column still fits. Measuring a detached clone is faster but
   lies: row heights *and* the usable stage height both shift when webfonts swap in. This way
   the board never clips and never leaves a column half empty.
+- **Columns are created before anything is measured.** `.col` is `flex: 1 1 0`, so a lone column
+  stretches to the full page width: measure a row in it and you get a figure that is wrong the
+  moment the next column appears and halves the width.
+- **Pages are balanced, not crammed.** Greedy packing leaves a single lonely item alone on the
+  last page, holding a whole screen for its full rotation. So the board packs once to learn the
+  page count and each block's real height, then binary-searches the shortest column height that
+  still fits in that many pages. The search runs on measured numbers in plain JS, so only one
+  extra pack ever touches the DOM. A board that does not fill its columns is centred vertically
+  rather than left hanging from the top.
 - **A section spilling across a column repeats its heading** marked "(cont.)", and a heading is
   never stranded alone at the foot of a column.
-- **`1rem` = 1% of the board's height**, so one design fits 720p, 1080p and 4K with no media
-  queries. The *Text size* slider scales that unit.
+- **`1rem` = 1% of the panel's short edge**, in portrait too, so one design fits 720p, 1080p and
+  4K with no media queries and rotating a screen does not magnify the text. The *Text size*
+  slider scales that unit.
+- **Icons are inline SVG** on a 24x24 grid, stroked in `currentColor` (`public/admin/icons.js`).
+  No icon font, no CDN: the PWA has to work on venue wifi with no internet.
 - **Images are downscaled in the browser** before upload, so a 12MP phone photo never reaches
   a Firestick. SVG upload is refused on purpose — it executes script when served same-origin.
 - **A rotation is sent as one payload**, with every scene fully resolved. A screen never goes

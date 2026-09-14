@@ -2,6 +2,7 @@ import {
   h, api, store, currentBoard, mutate, sheet, confirmSheet,
   field, input, select, toggle, toast, uploadImage, emit
 } from './core.js';
+import { icon } from './icons.js';
 import { SECTION_KINDS, STATUSES } from '../shared/theme.js';
 
 const STATUS_ORDER = ['on', 'low', 'off', 'soon'];
@@ -19,12 +20,14 @@ export function renderMenu() {
     boardBar(board),
     ...(board.sections || []).map(section => sectionCard(board, section)),
     h('button.btn.btn-block', { style: { marginTop: '14px' }, onclick: () => addSection(board) },
-      '+ Add section'),
+      icon('plus', 17), 'Add section'),
     h('div.section-title', 'Board'),
     h('div.row-btns',
-      h('button.btn.btn-sm', { onclick: () => editBoard(board) }, 'Board settings'),
-      h('button.btn.btn-sm', { onclick: () => window.open('/d/' + board.slug, '_blank') }, 'Open display'),
-      h('button.btn.btn-sm', { onclick: createBoard }, '+ New board')));
+      h('button.btn.btn-sm', { onclick: () => editBoard(board) },
+        icon('pencil', 15), 'Board settings'),
+      h('button.btn.btn-sm', { onclick: () => window.open('/d/' + board.slug, '_blank') },
+        icon('external', 15), 'Open display'),
+      h('button.btn.btn-sm', { onclick: createBoard }, icon('plus', 15), 'New board')));
 }
 
 // ------------------------------------------------------------------ posters
@@ -63,9 +66,10 @@ function renderPoster(board) {
                   if (id) await save({ image: id }, 'Artwork updated');
                 } catch (err) { toast(err.message, true); }
               }
-            }, c.image ? 'Replace artwork' : 'Upload artwork'),
+            }, icon('upload', 15), c.image ? 'Replace artwork' : 'Upload artwork'),
             c.image
-              ? h('button.btn.btn-sm.btn-danger', { onclick: () => save({ image: null }, 'Artwork removed') }, 'Remove')
+              ? h('button.btn.btn-sm.btn-danger', { onclick: () => save({ image: null }, 'Artwork removed') },
+                  icon('trash', 15), 'Remove')
               : null))),
 
         field('Eyebrow', eyebrow),
@@ -96,9 +100,11 @@ function renderPoster(board) {
 
     h('div.section-title', 'Board'),
     h('div.row-btns',
-      h('button.btn.btn-sm', { onclick: () => editBoard(board) }, 'Board settings'),
-      h('button.btn.btn-sm', { onclick: () => window.open('/d/' + board.slug, '_blank') }, 'Open display'),
-      h('button.btn.btn-sm', { onclick: createBoard }, '+ New board')));
+      h('button.btn.btn-sm', { onclick: () => editBoard(board) },
+        icon('pencil', 15), 'Board settings'),
+      h('button.btn.btn-sm', { onclick: () => window.open('/d/' + board.slug, '_blank') },
+        icon('external', 15), 'Open display'),
+      h('button.btn.btn-sm', { onclick: createBoard }, icon('plus', 15), 'New board')));
 }
 
 function darkenSlider(c, save) {
@@ -141,7 +147,8 @@ function sectionCard(board, section) {
       ? h('div.card-body.tight', ...items.map((item, i) => itemRow(section, item, i, items.length)))
       : h('div.empty', h('p', 'No items in this section yet.')),
     h('div.card-body',
-      h('button.btn.btn-block.btn-sm', { onclick: () => editItem(section, null) }, '+ Add item')));
+      h('button.btn.btn-block.btn-sm', { onclick: () => editItem(section, null) },
+        icon('plus', 17), 'Add item')));
 }
 
 function addSection(board) {
@@ -202,8 +209,10 @@ function itemRow(section, item, index, total) {
   return h('div.item' + (item.status === 'off' || item.hidden ? '.is-off' : ''),
     h('span.swatch', { style: item.color ? { background: item.color } : null }),
     h('div.item-grab',
-      h('button', { onclick: () => move(-1), disabled: index === 0, 'aria-label': 'Move up' }, '▲'),
-      h('button', { onclick: () => move(1), disabled: index === total - 1, 'aria-label': 'Move down' }, '▼')),
+      h('button', { onclick: () => move(-1), disabled: index === 0, 'aria-label': 'Move up' },
+        icon('chevronUp', 14)),
+      h('button', { onclick: () => move(1), disabled: index === total - 1, 'aria-label': 'Move down' },
+        icon('chevronDown', 14))),
     item.tap ? h('span.item-tap', item.tap) : null,
     h('div.item-main', { onclick: () => editItem(section, item) },
       h('div.item-name', item.name || 'Untitled'),
@@ -262,7 +271,7 @@ function editItem(section, item) {
         if (id) { image = id; imageBtn.textContent = 'Image set ✓'; }
       } catch (err) { toast(err.message, true); }
     }
-  }, image ? 'Replace image' : 'Add image');
+  }, icon('image', 15), image ? 'Replace image' : 'Add image');
 
   const pricesBox = h('div');
   const priceRows = [];
@@ -271,8 +280,9 @@ function editItem(section, item) {
     const amt = h('input.input.amt', { value: p.amount || '', placeholder: '8', inputmode: 'decimal' });
     const row = h('div.price-row', lbl, amt,
       h('button.btn.btn-sm.btn-danger', {
+        'aria-label': 'Remove price',
         onclick: () => { row.remove(); priceRows.splice(priceRows.findIndex(r => r.row === row), 1); }
-      }, '✕'));
+      }, icon('x', 15)));
     priceRows.push({ row, lbl, amt });
     pricesBox.appendChild(row);
   };
@@ -287,7 +297,7 @@ function editItem(section, item) {
     field('Style', f.style),
     h('div.grid2', field('Producer', f.producer), field('Origin', f.origin)),
     field('Prices', h('div', pricesBox,
-      h('button.btn.btn-sm', { onclick: () => addPrice() }, '+ Add size')),
+      h('button.btn.btn-sm', { onclick: () => addPrice() }, icon('plus', 15), 'Add size')),
       'Leave the size blank for a single unlabelled price. Non-numeric values ("MKT") show as typed.'),
     h('div.grid2', field('Status', f.status), field('Badge', f.badge)),
     field('Colour', h('div.color-row', colorPicker, clearColor),

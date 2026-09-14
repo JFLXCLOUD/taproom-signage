@@ -5,7 +5,7 @@
 // data must never be served stale — a bartender marking a keg kicked has to see
 // the truth, not a cached copy.
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = 'shell-' + VERSION;
 
 const SHELL_FILES = [
@@ -13,6 +13,7 @@ const SHELL_FILES = [
   '/admin/admin.css',
   '/admin/app.js',
   '/admin/core.js',
+  '/admin/icons.js',
   '/admin/view-menu.js',
   '/admin/view-design.js',
   '/admin/view-system.js',

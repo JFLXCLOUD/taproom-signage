@@ -304,9 +304,10 @@ function formatPrice(amount, currency) {
  * Packing against real geometry is self-correcting, so the board never clips
  * and never leaves a column half empty.
  */
-function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
+function packPages(blocks, colCount, colHeight, targetHeight, stage, theme, useHeaders) {
   stage.textContent = '';
   const built = [];
+  const heights = [];
   let page = null;
   let pageCols = [];
   let col = null;
@@ -345,11 +346,15 @@ function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
   newPage();
 
   for (const b of blocks) {
+    const before = col.scrollHeight;
     const node = b.build();
     col.appendChild(node);
+    const grew = col.scrollHeight - before;
 
-    // Fits, or it is the only thing in the column and has to go somewhere.
-    if (col.scrollHeight <= colHeight || col.childNodes.length === 1) continue;
+    // Break on the balance target, but never past the hard limit, and never
+    // leave a column completely empty.
+    const fits = col.scrollHeight <= targetHeight || col.childNodes.length === 1;
+    if (fits) { heights.push(grew); continue; }
 
     col.removeChild(node);
 
@@ -358,6 +363,7 @@ function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
     const last = col.lastChild;
     if (last && last.classList && last.classList.contains('sec')) {
       col.removeChild(last);
+      heights.pop();
       carried = b.sectionRef;
     }
 
@@ -365,23 +371,84 @@ function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
 
     if (carried) {
       col.appendChild(buildSectionHeader(carried, theme, false));
+      heights.push(col.scrollHeight);
     } else if (useHeaders && b.type === 'row' && b.sectionRef) {
       col.appendChild(buildSectionHeader(b.sectionRef, theme, true));
     }
+
+    const mark = col.scrollHeight;
     col.appendChild(node);
+    heights.push(col.scrollHeight - mark);
   }
 
   // Keep unused columns in place so every page has identical column widths,
   // but drop the divider rule that would otherwise hang beside empty space.
-  for (const p of built) {
-    for (const c of p.children) {
+  for (const pg of built) {
+    let tallest = 0;
+    for (const c of pg.children) {
       if (!c.children.length) c.classList.add('is-empty');
+      tallest = Math.max(tallest, c.scrollHeight);
     }
+    // Short board (or an evenly balanced one) - centre the whole block rather
+    // than leaving it pinned to the top with a dead band underneath. Padding
+    // the page, not the columns, keeps every column's first row aligned.
+    const slack = colHeight - tallest;
+    pg.style.paddingTop = slack > 8 ? Math.round(slack / 2) + 'px' : '';
   }
 
   pages = built;
   pageIndex = 0;
-  return built;
+  return { pages: built, heights };
+}
+
+/**
+ * Fill the columns evenly instead of cramming each one full in turn.
+ *
+ * Greedy packing is correct but ugly at the seams: nineteen rows across three
+ * columns fills two pages solid and leaves one lonely item alone on page three,
+ * which then holds the whole screen for its full rotation.
+ *
+ * So pack greedily once to learn how many pages the content genuinely needs and
+ * how tall each block really is, then binary-search the SHORTEST column height
+ * that still fits inside that page count. The search runs on the measured
+ * heights in plain JS - no DOM - so only one extra pack ever touches the page.
+ */
+function packBalanced(blocks, colCount, colHeight, stage, theme, useHeaders) {
+  const greedy = packPages(blocks, colCount, colHeight, colHeight, stage, theme, useHeaders);
+  const pageCount = greedy.pages.length;
+  const heights = greedy.heights;
+  if (pageCount < 1 || heights.length < 2) return greedy;
+
+  const tallest = heights.reduce((n, h) => Math.max(n, h), 0);
+  let lo = Math.max(tallest, 1);
+  let hi = colHeight;
+  if (lo >= hi) return greedy;
+
+  let best = -1;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (simulatePages(heights, colCount, mid) <= pageCount) { best = mid; hi = mid - 1; }
+    else lo = mid + 1;
+  }
+
+  if (best < 0 || best >= colHeight) return greedy;
+
+  const balanced = packPages(blocks, colCount, colHeight, best, stage, theme, useHeaders);
+  if (balanced.pages.length <= pageCount) return balanced;
+
+  // Re-inserted continuation headers cost more than the simulation predicted.
+  return packPages(blocks, colCount, colHeight, colHeight, stage, theme, useHeaders);
+}
+
+/** How many pages `heights` needs if no column may exceed `target`. */
+function simulatePages(heights, colCount, target) {
+  let cols = 1;
+  let used = 0;
+  for (const h of heights) {
+    if (used > 0 && used + h > target) { cols += 1; used = 0; }
+    used += h;
+  }
+  return Math.ceil(cols / colCount);
 }
 
 function startRotation(seconds) {
@@ -628,7 +695,7 @@ function layout(data, stage, theme, attempt) {
 
   const wanted = Math.max(1, Number(theme.columns) || autoColumns(stage, blocks.length));
   const colCount = Math.min(wanted, maxColumnsFor(stage));
-  packPages(blocks, colCount, stage.clientHeight, stage, theme, useHeaders);
+  packBalanced(blocks, colCount, stage.clientHeight, stage, theme, useHeaders);
   startRotation(theme.rotateSeconds);
   watchFit(data, stage, theme, attempt);
 }
