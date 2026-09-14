@@ -308,29 +308,38 @@ function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
   stage.textContent = '';
   const built = [];
   let page = null;
+  let pageCols = [];
   let col = null;
   let colIdx = 0;
-
-  const newCol = () => {
-    col = el('div', 'col');
-    if (theme.rowDividers) col.classList.add('divide');
-    if (theme.zebra) col.classList.add('zebra');
-    page.appendChild(col);
-  };
 
   const newPage = () => {
     page = el('div', 'page');
     page.classList.add(built.length === 0 ? 'is-live' : 'is-enter');
+
+    // Every column is created up front. `.col` is flex: 1 1 0, so a lone column
+    // would stretch to the full page width and every row would be measured at
+    // double width - then halve (and re-wrap, and grow) the moment the next
+    // column appeared. Building them all first fixes each column's width before
+    // a single row is measured.
+    pageCols = [];
+    for (let i = 0; i < colCount; i++) {
+      const c = el('div', 'col');
+      if (theme.rowDividers) c.classList.add('divide');
+      if (theme.zebra) c.classList.add('zebra');
+      page.appendChild(c);
+      pageCols.push(c);
+    }
+
     stage.appendChild(page);
     built.push(page);
     colIdx = 0;
-    newCol();
+    col = pageCols[0];
   };
 
   const advance = () => {
     colIdx += 1;
     if (colIdx >= colCount) newPage();
-    else newCol();
+    else col = pageCols[colIdx];
   };
 
   newPage();
@@ -360,6 +369,14 @@ function packPages(blocks, colCount, colHeight, stage, theme, useHeaders) {
       col.appendChild(buildSectionHeader(b.sectionRef, theme, true));
     }
     col.appendChild(node);
+  }
+
+  // Keep unused columns in place so every page has identical column widths,
+  // but drop the divider rule that would otherwise hang beside empty space.
+  for (const p of built) {
+    for (const c of p.children) {
+      if (!c.children.length) c.classList.add('is-empty');
+    }
   }
 
   pages = built;
@@ -584,7 +601,8 @@ async function waitForFonts(theme) {
   } catch { /* offline: fallback stacks are already on screen */ }
 }
 
-function layout(data, stage, theme) {
+function layout(data, stage, theme, attempt) {
+  attempt = attempt || 0;
   const currency = data.venue?.currency || '$';
 
   const blocks = [];
@@ -608,9 +626,48 @@ function layout(data, stage, theme) {
     return;
   }
 
-  const colCount = Math.max(1, Number(theme.columns) || autoColumns(stage, blocks.length));
+  const wanted = Math.max(1, Number(theme.columns) || autoColumns(stage, blocks.length));
+  const colCount = Math.min(wanted, maxColumnsFor(stage));
   packPages(blocks, colCount, stage.clientHeight, stage, theme, useHeaders);
   startRotation(theme.rotateSeconds);
+  watchFit(data, stage, theme, attempt);
+}
+
+let fitObserver = null;
+
+/**
+ * Packing measures live, but rows can still grow *after* we measured - a
+ * webfont swapping in, or an item image finally decoding. That silently pushes
+ * the tail of a column off screen, and a next-frame check is far too early to
+ * catch it. So watch the columns for any size change and re-pack when the
+ * result stops fitting. Capped, because a row taller than the whole column can
+ * never be made to fit and would otherwise loop forever.
+ */
+function watchFit(data, stage, theme, attempt) {
+  if (fitObserver) { fitObserver.disconnect(); fitObserver = null; }
+  if (attempt >= 3) return;
+
+  const recheck = () => {
+    if (!stage.isConnected) return;
+    const limit = stage.clientHeight + 2;
+    const overflows = Array.prototype.some.call(
+      stage.querySelectorAll('.col'), (c) => c.scrollHeight > limit);
+    if (overflows) layout(data, stage, theme, attempt + 1);
+  };
+
+  if (typeof ResizeObserver === 'undefined') {
+    // Older Silk builds: settle for a few spaced checks.
+    [250, 900, 2500].forEach(ms => setTimeout(recheck, ms));
+    return;
+  }
+
+  let queued = false;
+  fitObserver = new ResizeObserver(() => {
+    if (queued) return;
+    queued = true;
+    setTimeout(() => { queued = false; recheck(); }, 120);
+  });
+  Array.prototype.forEach.call(stage.querySelectorAll('.col'), c => fitObserver.observe(c));
 }
 
 function autoColumns(stage, blockCount) {
@@ -618,6 +675,16 @@ function autoColumns(stage, blockCount) {
   if (blockCount <= 8) return 1;
   if (blockCount <= 20) return wide ? 2 : 1;
   return wide ? 3 : 2;
+}
+
+/**
+ * A row needs roughly 40rem before names start wrapping one word per line.
+ * Portrait boards are only 1080 wide, so an explicit "3 columns" chosen for a
+ * landscape screen has to be capped rather than obeyed literally.
+ */
+function maxColumnsFor(stage) {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 10;
+  return Math.max(1, Math.floor(stage.clientWidth / (40 * rem)));
 }
 
 function centerCard(title, body) {

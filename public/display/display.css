@@ -12,8 +12,10 @@ html {
 
 /* Portrait: a Fire TV still outputs a landscape signal, so a vertically
    mounted panel needs the whole board rotated in CSS. The app box swaps its
-   axes and 1rem follows the new "height", which is now the viewport width. */
-html.rot { font-size: calc(1vw * var(--density, 1)); }
+   axes, but 1rem deliberately does NOT change: the signal is always 1920x1080,
+   so 1vh is the panel's short edge either way. Keeping the unit fixed means
+   text stays the same physical size when you rotate a screen, and the taller
+   board simply fits more rows instead of magnifying everything. */
 
 .rot-90 {
   width: 100vh;
@@ -575,3 +577,7 @@ body {
   max-width: 46em;
   white-space: pre-wrap;
 }
+
+/* An unused trailing column keeps the page's column widths consistent,
+   but must not draw a divider beside empty space. */
+.col.is-empty::before { display: none; }
