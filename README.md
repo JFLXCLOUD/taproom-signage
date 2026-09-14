@@ -152,6 +152,7 @@ so `MKT` or `8/12` work as typed.
 | `DATA_DIR` | `./data` | SQLite db + uploaded images. |
 | `SEED_DEMO` | `1` | `0` starts with no boards. |
 | `TZ` | system | Affects the on-screen clock. |
+| `CAPTIVE_PORTAL` | `0` | `1` redirects OS connectivity probes to the admin app. Only for the Pi-as-access-point build — see [HARDWARE.md](HARDWARE.md). |
 
 Display endpoints (`/d/:slug`, `/p/:slug`, `/api/board/:slug`, `/api/playlist/:slug`,
 `/api/device/:id`) are **unauthenticated** —

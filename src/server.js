@@ -16,6 +16,26 @@ const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Opt-in, for the Raspberry Pi image where this box IS the Wi-Fi network.
+// Phones probe a known URL on joining; answering with a redirect makes them pop
+// the admin app open by themselves, so nobody has to type an address.
+//
+// Off by default and it must stay that way: when the Pi passes real internet
+// through to the screens, hijacking these probes would make every device on the
+// network believe it is offline.
+const CAPTIVE_PORTAL = process.env.CAPTIVE_PORTAL === '1';
+
+const PROBE_PATHS = new Set([
+  '/generate_204',              // Android
+  '/gen_204',
+  '/hotspot-detect.html',       // Apple
+  '/library/test/success.html',
+  '/ncsi.txt',                  // Windows
+  '/connecttest.txt',
+  '/success.txt',               // Firefox
+  '/canonical.html'
+]);
+
 // ------------------------------------------------------------------ routes
 
 /** [method, path pattern, handler, requiresAuth] — :params become named groups. */
@@ -95,6 +115,12 @@ const server = http.createServer(async (req, res) => {
       return await route.handler(req, res, m.groups || {}, url);
     }
 
+    // --- captive portal ---------------------------------------------------
+    if (CAPTIVE_PORTAL && PROBE_PATHS.has(pathname.toLowerCase())) {
+      res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
+      return res.end();
+    }
+
     // --- uploaded images (content-addressed, cache forever) ---------------
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (pathname.startsWith('/u/')) {
@@ -152,6 +178,7 @@ server.listen(PORT, HOST, () => {
   console.log(`  Admin PWA   http://localhost:${PORT}/`);
   console.log(`  Display     http://localhost:${PORT}/display`);
   console.log(`  Data dir    ${store.DATA_DIR}`);
+  if (CAPTIVE_PORTAL) console.log('  Captive portal ON (probe URLs redirect to the admin app)');
   if (!pw || pw === 'changeme') {
     console.log('');
     console.log('  ⚠  ADMIN_PASSWORD is unset (default: "changeme").');
