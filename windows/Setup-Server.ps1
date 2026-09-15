@@ -2,10 +2,11 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Prepare', 'Install', 'Uninstall')][string]$Action = 'Install',
-    [string]$InstallDir = $PSScriptRoot,
+    [string]$InstallDir = '',
     [string[]]$RemoteAddress = @('LocalSubnet', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10')
 )
 $ErrorActionPreference = 'Stop'
+if (-not $InstallDir) { $InstallDir = $PSScriptRoot }
 $serverHome = Join-Path $env:ProgramData 'TaproomSignage'
 $serviceName = 'TaproomSignage'
 $ruleNames = @('TaproomSignage-HTTP', 'TaproomSignage-Discovery')

@@ -33,8 +33,6 @@ Name: "{group}\Taproom Signage - Connect your TVs"; Filename: "{app}\TaproomServ
 Name: "{autodesktop}\Taproom Signage"; Filename: "{app}\TaproomServer.exe"
 [Run]
 Filename: "{app}\TaproomServer.exe"; Description: "Show server addresses and open the control app"; Flags: postinstall nowait skipifsilent runasoriginaluser
-[UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Setup-Server.ps1"" -Action Uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveService"
 [Code]
 var
   Settings: TInputQueryWizardPage;
@@ -81,6 +79,13 @@ begin
     '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '" -Action ' + Action + ' -InstallDir "' + ExpandConstant('{app}') + '"',
     '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := Result and (Code = 0);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  if not RunSetupScript(ExpandConstant('{app}\Setup-Server.ps1'), 'Uninstall') then
+    RaiseException('Could not stop and remove the server service. No application files have been removed. Check ProgramData\TaproomSignage\logs\setup-error.txt and retry as administrator.');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
