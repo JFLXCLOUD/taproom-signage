@@ -60,6 +60,18 @@ body {
 
 /* ------------------------------------------------------------------ header */
 
+/* Layout accents participate in the renderer's measured pagination. */
+[data-menu-style="bistro"] .head { border-bottom: .5rem double var(--accent); }
+[data-menu-style="bistro"] .sec-name { font-style: italic; }
+[data-menu-style="coastal"] .row { border-radius: 1.2rem; padding-left: 1rem; padding-right: 1rem; }
+[data-menu-style="coastal"] .head { border-bottom-color: var(--accent); }
+[data-menu-style="marquee"] .head { border-top: .2rem solid var(--accent); padding-top: 1.5rem; border-bottom: .5rem double var(--accent); }
+[data-menu-style="marquee"] .sec-name { letter-spacing: .12em; }
+[data-menu-style="market"] .sec { background: var(--surface); border-left: .5rem solid var(--accent); padding: 1rem 1.4rem; }
+[data-menu-style="stadium"] .sec { background: var(--accent); color: var(--accent-text); padding: .8rem 1.2rem; }
+[data-menu-style="stadium"] .sec-name { color: var(--accent-text); }
+[data-menu-style="stadium"] .head { border-bottom: .65rem solid var(--accent); }
+
 .head {
   display: flex;
   align-items: center;
@@ -640,3 +652,18 @@ body {
   padding: 1.4rem 1.6rem 1.4rem 2.6rem;
   margin: 0.4rem 0 0;
 }
+
+/* Full-panel liquid canvas, outside the menu's safe-area and rotation. */
+.beer-transition { position: fixed; inset: 0; overflow: hidden; z-index: 90; pointer-events: none; }
+.beer-glass { position: absolute; inset: 0; width: 100vw; height: 100vh; overflow: hidden; }
+.beer-glass.beer-rot-90 { width: 100vh; height: 100vw; transform-origin: 0 0; transform: translateX(100vw) rotate(90deg); }
+.beer-glass.beer-rot-270 { width: 100vh; height: 100vw; transform-origin: 0 0; transform: translateY(100vh) rotate(-90deg); }
+canvas.beer-liquid { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: reduce) { .beer-transition:not(.beer-preview) { display: none; } }
+
+.poster-transition { position: fixed; inset: 0; z-index: 90; pointer-events: none; overflow: hidden; }
+.transition-panel { position: absolute; inset: 0; width: 100vw; height: 100vh; overflow: hidden; }
+.transition-panel.transition-rot-90 { width: 100vh; height: 100vw; transform-origin: 0 0; transform: translateX(100vw) rotate(90deg); }
+.transition-panel.transition-rot-270 { width: 100vh; height: 100vw; transform-origin: 0 0; transform: translateY(100vh) rotate(-90deg); }
+.transition-panel canvas { display: block; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) { .poster-transition:not(.requested-preview) { display: none; } }

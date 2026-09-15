@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { normalizePosterExpiry } from '../public/shared/poster-expiry.js';
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -140,6 +141,7 @@ function ensureColumn(table, column, decl) {
 ensureColumn('boards', 'content', "TEXT NOT NULL DEFAULT '{}'");
 // A screen shows either one board or a rotation; never both.
 ensureColumn('devices', 'playlist_id', 'TEXT REFERENCES playlists(id) ON DELETE SET NULL');
+ensureColumn('devices', 'orientation', 'TEXT');
 
 // ---------------------------------------------------------------- helpers
 
@@ -218,6 +220,7 @@ export function uniqueSlug(base, ignoreId) {
 }
 
 export function createBoard(data = {}) {
+  const content = data.layout === 'poster' ? normalizePosterExpiry(data.content || {}) : data.content || {};
   const id = nid();
   const t = now();
   const maxSort = q('SELECT COALESCE(MAX(sort), -1) AS m FROM boards').get().m;
@@ -229,7 +232,7 @@ export function createBoard(data = {}) {
       data.name || 'New board',
       data.layout || 'grid',
       JSON.stringify(data.theme || {}),
-      JSON.stringify(data.content || {}),
+      JSON.stringify(content),
       data.ticker || '',
       maxSort + 1, t, t
     );
@@ -240,6 +243,7 @@ export function createBoard(data = {}) {
 export function updateBoard(id, patch) {
   const cur = getBoard(id);
   if (!cur) return null;
+  const content = (patch.layout || cur.layout) === 'poster' ? normalizePosterExpiry(patch.content || {}, cur.content) : { ...cur.content, ...patch.content };
   q(`UPDATE boards SET slug = ?, name = ?, layout = ?, theme = ?, content = ?, ticker = ?,
        sort = ?, updated_at = ? WHERE id = ?`)
     .run(
@@ -247,7 +251,7 @@ export function updateBoard(id, patch) {
       patch.name ?? cur.name,
       patch.layout ?? cur.layout,
       JSON.stringify(patch.theme ? { ...cur.theme, ...patch.theme } : cur.theme),
-      JSON.stringify(patch.content ? { ...cur.content, ...patch.content } : cur.content),
+      JSON.stringify(content),
       patch.ticker ?? cur.ticker,
       patch.sort ?? cur.sort,
       now(), id
@@ -517,14 +521,37 @@ export function updateDevice(id, patch) {
   if (patch.board_id) playlistId = null;
   if (patch.playlist_id) boardId = null;
 
-  q('UPDATE devices SET name = ?, board_id = ?, playlist_id = ? WHERE id = ?')
-    .run(patch.name ?? cur.name, boardId || null, playlistId || null, id);
+  const orientation = patch.orientation === undefined ? cur.orientation : patch.orientation;
+  if (orientation !== null && !['landscape', 'portrait', 'portraitLeft', 'auto'].includes(orientation)) throw new Error('Choose a valid screen orientation.');
+  q('UPDATE devices SET name = ?, board_id = ?, playlist_id = ?, orientation = ? WHERE id = ?')
+    .run(patch.name ?? cur.name, boardId || null, playlistId || null, orientation, id);
   bumpRevision();
   return getDevice(id);
 }
 
 export function touchDevice(id) {
   q('UPDATE devices SET last_seen = ? WHERE id = ?').run(now(), id);
+}
+
+// Build a private rotation for this TV. Never edit a shared rotation implicitly.
+export function setDeviceContent(id, items) {
+  const device = getDevice(id);
+  if (!device) throw new Error('This TV is no longer paired. Refresh and try again.');
+  if (!Array.isArray(items) || !items.length || items.length > 100) throw new Error('Choose between 1 and 100 items.');
+  for (const item of items) {
+    if (!getBoard(item.board_id)) throw new Error('One of these items no longer exists. Refresh and try again.');
+    if (!Number.isInteger(item.seconds) || item.seconds < 5 || item.seconds > 3600) throw new Error('Enter a duration from 5 to 3600 seconds.');
+  }
+  if (items.length === 1) return updateDevice(id, { board_id: items[0].board_id });
+  const playlist = createPlaylist({ name: (device.name || 'TV') + ' content' });
+  for (const item of items) addPlaylistItem(playlist.id, item.board_id, item.seconds);
+  return updateDevice(id, { playlist_id: playlist.id });
+}
+
+export function transaction(fn) {
+  db.exec('BEGIN IMMEDIATE');
+  try { const result = fn(); db.exec('COMMIT'); return result; }
+  catch (err) { db.exec('ROLLBACK'); throw err; }
 }
 
 export function deleteDevice(id) {
@@ -581,6 +608,7 @@ export function purgeSessions() {
 /** Everything the admin PWA needs in one request. */
 export function fullState() {
   return {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     revision: getRevision(),
     settings: getSettings(),
     boards: listBoards().map(b => ({

@@ -1,5 +1,8 @@
 import { themeToCssVars, webfontHref, webfontFamilies, rotationFor, resolveTheme, STATUSES } from '../shared/theme.js';
 import { qrSvg } from '../shared/qr.js';
+import { posterTransitionFor, runPosterTransition } from './poster-transitions.js';
+import { POSTER_TRANSITIONS } from '../shared/transitions.js';
+import { posterExpired } from '../shared/poster-expiry.js';
 
 const app = document.getElementById('app');
 const CACHE_KEY = 'signage.lastPayload';
@@ -8,6 +11,9 @@ const DEVICE_KEY = 'signage.deviceId';
 // Preview mode renders one static frame: no SSE, no timers, no rotation.
 // Used by the admin's live preview pane and by screenshot tooling.
 const PREVIEW = new URLSearchParams(location.search).has('preview');
+const orientationParam = new URLSearchParams(location.search).get('orientation');
+const previewOrientation = PREVIEW && ['landscape', 'portrait', 'portraitLeft', 'auto'].includes(orientationParam) ? orientationParam : null;
+const previewScene = scene => previewOrientation ? { ...scene, theme: { ...scene.theme, orientation: previewOrientation } } : scene;
 
 let payload = null;      // last rendered board payload
 let deviceId = null;     // set when running in paired-screen mode
@@ -24,6 +30,7 @@ let liveRevision = -1;
  */
 function sourceFromUrl() {
   const params = new URLSearchParams(location.search);
+  if (PREVIEW && params.get('device')) return { kind: 'device', slug: params.get('device') };
   if (params.get('board')) return { kind: 'board', slug: params.get('board') };
   if (params.get('playlist')) return { kind: 'playlist', slug: params.get('playlist') };
 
@@ -60,6 +67,7 @@ async function ensureDevice() {
 async function loadPayload() {
   const src = sourceFromUrl();
   if (src) {
+    if (src.kind === 'device') return getJson('/api/device/' + encodeURIComponent(src.slug) + '/preview');
     const base = src.kind === 'playlist' ? '/api/playlist/' : '/api/board/';
     return getJson(base + encodeURIComponent(src.slug));
   }
@@ -80,7 +88,10 @@ async function refresh() {
   } catch (err) {
     console.warn('refresh failed', err);
     setConnected(false);
-    if (!payload) restoreFromCache();
+    if (PREVIEW) {
+      renderMessage('Preview unavailable', 'Check your connection and try again.');
+      parent.postMessage({ type: 'preview-error' }, location.origin);
+    } else if (!payload) restoreFromCache();
   }
 }
 
@@ -166,6 +177,7 @@ function flashIdentify() {
 // ------------------------------------------------------------------ theming
 
 function applyTheme(theme) {
+  app.dataset.menuStyle = theme.menuStyle || '';
   const root = document.documentElement;
   // Fill any gaps from the defaults first. A partial theme (or none at all, as
   // on the pairing screen) would otherwise write "undefined" into the custom
@@ -496,14 +508,41 @@ function updateDots() {
 let scenes = [];
 let sceneIndex = 0;
 let sceneTimer = null;
+let visibleScene = null;
+let posterWipe = null;
+let sceneGeneration = 0;
+let expiryTimer = null;
+
+function watchPosterExpiry(data) {
+  clearTimeout(expiryTimer);
+  const boards = data?.type === 'playlist' ? (data.scenes || []).map(s => s.board) : [data?.board];
+  const cutoffs = boards.filter(b => b?.layout === 'poster').map(b => b.content?.expiresAt).filter(t => Number.isFinite(t) && t > Date.now());
+  if (!cutoffs.length) return;
+  // Browser timers cap at ~24 days. Recheck long dates without expiring early.
+  expiryTimer = setTimeout(() => {
+    if (visibleScene && posterExpired(visibleScene.board)) applyPayload(payload);
+    else watchPosterExpiry(payload);
+  }, Math.min(2147480000, Math.max(1, Math.min(...cutoffs) - Date.now() + 10)));
+}
+
+function cancelTransition() {
+  posterWipe?.cancel();
+  posterWipe = null;
+}
 
 function stopScenes() {
+  sceneGeneration++;
   clearTimeout(sceneTimer);
   sceneTimer = null;
 }
 
 /** Entry point for any payload: a single board, or a rotation of scenes. */
 function applyPayload(data) {
+  watchPosterExpiry(data);
+  if (data?.type === 'empty' || posterExpired(data?.board)) {
+    stopScenes(); scenes = [];
+    return renderMessage('No active content', 'This poster has finished. Choose another menu or poster for this TV.');
+  }
   if (data && data.type === 'playlist') return playRotation(data);
   stopScenes();
   scenes = [];
@@ -512,29 +551,40 @@ function applyPayload(data) {
 
 function playRotation(data) {
   const currentId = scenes[sceneIndex] && scenes[sceneIndex].sceneId;
-  scenes = data.scenes || [];
+  scenes = (data.scenes || []).filter(s => !posterExpired(s.board));
 
   if (!scenes.length) {
     stopScenes();
-    return renderMessage('Nothing in this rotation yet',
-      'Add a board or a poster to it in the control app.');
+    return renderMessage('No active content',
+      'Choose an active menu or poster for this TV.');
   }
 
   // An edit mid-rotation re-sends the whole thing. Stay on the scene that is
   // already up rather than snapping back to the first one.
-  const same = scenes.findIndex(s => s.sceneId === currentId);
+  let same = scenes.findIndex(s => s.sceneId === currentId);
+  if (same < 0 && currentId) {
+    const original = data.scenes || [];
+    const index = original.findIndex(s => s.sceneId === currentId);
+    for (let offset = 1; index >= 0 && offset <= original.length; offset++) {
+      const nextId = original[(index + offset) % original.length].sceneId;
+      same = scenes.findIndex(s => s.sceneId === nextId);
+      if (same >= 0) break;
+    }
+  }
   sceneIndex = same >= 0 ? same : 0;
   showScene();
 }
 
-function showScene() {
+async function showScene() {
   stopScenes();
+  const generation = sceneGeneration;
   const scene = scenes[sceneIndex];
   if (!scene) return;
+  if (posterExpired(scene.board)) return playRotation(payload);
 
-  renderScene(scene);
+  await renderScene(scene);
 
-  if (PREVIEW || scenes.length < 2) return;
+  if (generation !== sceneGeneration || PREVIEW || scenes.length < 2) return;
   const ms = Math.max(5, Number(scene.seconds) || 30) * 1000;
   sceneTimer = setTimeout(() => {
     sceneIndex = (sceneIndex + 1) % scenes.length;
@@ -542,11 +592,57 @@ function showScene() {
   }, ms);
 }
 
-function renderScene(scene) {
+async function renderScene(scene) {
   if (!scene) return;
+  scene = previewScene(scene);
+  const previous = visibleScene;
+  visibleScene = scene;
+  cancelTransition();
+  const transition = posterTransitionFor(previous, scene);
+  if (!PREVIEW && transition !== 'none') {
+    clearInterval(rotateTimer);
+    rotateTimer = null;
+    const wipe = runPosterTransition(transition, previous.theme, () => { if (!posterExpired(scene.board)) paintScene(scene); });
+    posterWipe = wipe;
+    await wipe.finished;
+    if (posterWipe === wipe) posterWipe = null;
+    return;
+  }
+  paintScene(scene);
+  if (PREVIEW) parent.postMessage({ type: 'preview-ready' }, location.origin);
+}
+
+function paintScene(scene) {
   if (scene.board && scene.board.layout === 'poster') return renderPoster(scene);
   render(scene);
 }
+
+// The control app can preview the effect without changing saved content or TVs.
+let previewReset = null;
+window.addEventListener('message', async event => {
+  if (PREVIEW && event.origin === location.origin && event.source === parent && event.data?.type === 'preview-theme' && visibleScene) {
+    clearTimeout(previewReset);
+    cancelTransition();
+    visibleScene = previewScene({ ...visibleScene, theme: event.data.theme });
+    paintScene(visibleScene);
+    return;
+  }
+  if (!PREVIEW || event.origin !== location.origin || event.source !== parent || !['preview-beer', 'preview-transition'].includes(event.data?.type) || !visibleScene) return;
+  clearTimeout(previewReset);
+  cancelTransition();
+  const effect = event.data.type === 'preview-beer' ? 'beer' : event.data.effect;
+  if (!Object.prototype.hasOwnProperty.call(POSTER_TRANSITIONS, effect) || effect === 'none') return;
+  const original = visibleScene;
+  paintScene(original);
+  const demo = { ...original, board: { ...original.board, layout: 'poster', content: { eyebrow: 'COMING UP', headline: 'Your next event', subhead: 'This is how your poster arrives.', showLogo: false } } };
+  const wipe = runPosterTransition(effect, original.theme, () => paintScene(demo), { preview: true });
+  posterWipe = wipe;
+  await wipe.finished;
+  if (posterWipe !== wipe) return;
+  posterWipe = null;
+  parent.postMessage({ type: event.data.type === 'preview-beer' ? 'preview-beer-ended' : 'preview-transition-ended', reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches }, location.origin);
+  previewReset = setTimeout(() => { previewReset = null; paintScene(original); }, 2200);
+});
 
 // ------------------------------------------------------------------ poster
 
@@ -771,6 +867,8 @@ function centerCard(title, body) {
 }
 
 function renderPairing(data) {
+  cancelTransition();
+  visibleScene = null;
   applyTheme(data.theme || {});
   app.className = '';
   app.textContent = '';
@@ -807,6 +905,10 @@ function renderPairing(data) {
 }
 
 function renderMessage(title, body) {
+  clearInterval(rotateTimer);
+  pages = [];
+  cancelTransition();
+  visibleScene = null;
   app.className = '';
   app.textContent = '';
   app.appendChild(centerCard(title, body));
@@ -891,7 +993,13 @@ function setupTicker(box, inner, textValue) {
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (payload) applyPayload(payload); }, 350);
+  resizeTimer = setTimeout(() => {
+    if (PREVIEW) {
+      // Opening/resizing the control preview can dispatch a late resize event.
+      // Reapplying the saved payload here used to cancel the in-flight demo.
+      if (visibleScene && !posterWipe && !previewReset) paintScene(visibleScene);
+    } else if (payload) applyPayload(payload);
+  }, 350);
 });
 
 /** Best-effort: stop the panel sleeping. Fire TV also needs its own setting. */
@@ -908,7 +1016,9 @@ async function keepAwake() {
   } catch { /* unsupported on Silk; documented workaround in README */ }
 }
 
-restoreFromCache();
+// A preview must wait for the requested board. Restoring the shared TV cache
+// first signals readiness too early; the network response then cancels the demo.
+if (!PREVIEW) restoreFromCache();
 refresh();
 if (!PREVIEW) {
   connectEvents();

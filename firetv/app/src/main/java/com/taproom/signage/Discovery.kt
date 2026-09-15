@@ -39,14 +39,14 @@ object Discovery {
     }
 
     @JvmStatic
-    fun resolve(saved: String?, callback: Callback) {
+    fun resolve(saved: String?, manualOnly: Boolean = false, callback: Callback) {
         Thread({
             var result: String? = null
             try {
                 if (!saved.isNullOrBlank() && isOurServer(saved)) {
                     result = saved
                 } else {
-                    result = broadcastProbe() ?: sweepSubnet()
+                    if (!manualOnly) result = broadcastProbe() ?: sweepSubnet()
                 }
             } catch (t: Throwable) {
                 Log.w("discovery failed: ${t.message}")
@@ -101,7 +101,7 @@ object Discovery {
             null
         } else {
             val port = body.optInt("port", 0)
-            if (port <= 0) null else "http://${packet.address.hostAddress}:$port"
+            if (port !in 1..65535) null else "http://${packet.address.hostAddress}:$port"
         }
     } catch (t: Throwable) {
         null

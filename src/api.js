@@ -6,6 +6,7 @@ import * as store from './db.js';
 import { UPLOAD_DIR, nid } from './db.js';
 import { json, readJson, parseCookies, setCookie } from './http.js';
 import { resolveTheme } from '../public/shared/theme.js';
+import { posterExpired } from '../public/shared/poster-expiry.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const SESSION_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days — bartenders shouldn't re-login nightly
@@ -109,6 +110,7 @@ export function getBoardPayload(req, res, { slug }) {
 
 function withTheme(payload) {
   if (!payload) return payload;
+  if (posterExpired(payload.board)) return { type: 'empty', reason: 'expired', revision: payload.revision, venue: payload.venue, theme: resolveTheme(payload.globalTheme, payload.board.theme) };
   return { ...payload, type: 'board', theme: resolveTheme(payload.globalTheme, payload.board.theme) };
 }
 
@@ -122,7 +124,7 @@ function playlistPayload(playlist) {
   const scenes = [];
   for (const item of playlist.items) {
     const board = store.boardPayload(item.board_id);
-    if (!board) continue;
+    if (!board || posterExpired(board.board)) continue;
     scenes.push({ sceneId: item.id, seconds: item.seconds, ...withTheme(board) });
   }
   return {
@@ -150,10 +152,10 @@ export async function registerDevice(req, res) {
 }
 
 /** Display polls/refetches this: either "unpaired + code" or the full board payload. */
-export function resolveDevice(req, res, { id }) {
+export function resolveDevice(req, res, { id, preview }) {
   const device = store.getDevice(id);
   if (!device) return json(res, 404, { error: 'Unknown device' });
-  store.touchDevice(id);
+  if (!preview) store.touchDevice(id);
 
   const unpaired = () => {
     const settings = store.getSettings();
@@ -167,20 +169,21 @@ export function resolveDevice(req, res, { id }) {
     });
   };
 
-  const who = { id: device.id, name: device.name };
+  const who = { id: device.id, name: device.name, orientation: device.orientation };
+  const forTV = payload => device.orientation ? { ...payload, theme: { ...payload.theme, orientation: device.orientation } } : payload;
 
   if (device.playlist_id) {
     const playlist = store.getPlaylist(device.playlist_id);
     const payload = playlist ? playlistPayload(playlist) : null;
-    if (!payload || !payload.scenes.length) return unpaired();
-    return json(res, 200, { paired: true, device: who, ...payload });
+    if (!payload) return unpaired();
+    return json(res, 200, { paired: true, device: who, ...payload, scenes: payload.scenes.map(forTV) });
   }
 
   if (!device.board_id) return unpaired();
 
   const payload = store.boardPayload(device.board_id);
   if (!payload) return unpaired();
-  json(res, 200, { paired: true, device: who, ...withTheme(payload) });
+  json(res, 200, { paired: true, device: who, ...forTV(withTheme(payload)) });
 }
 
 export function listDevices(req, res) {
@@ -194,7 +197,8 @@ export async function claimDevice(req, res) {
   const updated = store.updateDevice(device.id, {
     board_id: body.board_id || null,
     playlist_id: body.playlist_id || null,
-    name: body.name || device.name || 'Screen'
+    name: body.name || device.name || 'Screen',
+    orientation: body.orientation === undefined ? device.orientation : body.orientation
   });
   changed();
   json(res, 200, { device: updated });
@@ -202,10 +206,44 @@ export async function claimDevice(req, res) {
 
 export async function patchDevice(req, res, { id }) {
   const body = await readJson(req, 4096);
+  if (body.orientation !== undefined && body.orientation !== null && !['landscape', 'portrait', 'portraitLeft', 'auto'].includes(body.orientation)) return json(res, 400, { error: 'Choose a valid screen orientation.' });
   const device = store.updateDevice(id, body);
   if (!device) return json(res, 404, { error: 'Unknown device' });
   changed();
   json(res, 200, { device });
+}
+
+export async function publishContent(req, res) {
+  const body = await readJson(req);
+  let result;
+  try {
+    result = store.transaction(() => {
+      if (!Array.isArray(body.deviceIds) || body.deviceIds.length > 100) throw new Error('Choose the TVs to update.');
+      const ids = [...new Set(body.deviceIds)];
+      for (const id of ids) if (!store.getDevice(id)) throw new Error('A selected TV is no longer paired.');
+      if (body.poster || body.boardId) {
+        if (body.poster && !String(body.poster.name || '').trim()) throw new Error('Give the poster a name.');
+        if (body.poster && !body.poster.content?.image && !String(body.poster.content?.headline || '').trim()) throw new Error('Add artwork or an event title.');
+        if (!['append', 'replace'].includes(body.mode)) throw new Error('Choose how to show the poster.');
+        const board = body.poster ? store.createBoard({ ...body.poster, layout: 'poster' }) : store.getBoard(body.boardId);
+        if (!board) throw new Error('This menu or poster no longer exists.');
+        for (const id of ids) {
+          const device = store.getDevice(id);
+          const previous = body.mode === 'append'
+            ? device.playlist_id ? (store.getPlaylist(device.playlist_id)?.items || [])
+              : device.board_id ? [{ board_id: device.board_id, seconds: 120 }] : []
+            : [];
+          store.setDeviceContent(id, [...previous.filter(i => i.board_id !== board.id), { board_id: board.id, seconds: body.seconds }]);
+        }
+        return { board };
+      }
+      if (!ids.length) throw new Error('Choose a TV.');
+      for (const id of ids) store.setDeviceContent(id, body.items);
+      return { ok: true };
+    });
+  } catch (err) { return json(res, 400, { error: err.message }); }
+  changed();
+  json(res, 200, result);
 }
 
 export function removeDevice(req, res, { id }) {
@@ -236,7 +274,7 @@ export async function createBoard(req, res) {
   const body = await readJson(req);
   const board = store.createBoard(body);
   // A brand-new board with no sections renders as an empty screen; give it one.
-  if (!body.skipDefaultSection) store.createSection(board.id, { name: 'On Draft', kind: 'draft' });
+  if (!body.skipDefaultSection) store.createSection(board.id, { name: body.sectionName || 'On Draft', kind: 'draft' });
   changed();
   json(res, 200, { board: store.getBoard(board.id) });
 }

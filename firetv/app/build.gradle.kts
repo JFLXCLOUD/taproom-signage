@@ -19,8 +19,8 @@ android {
         // Play Store target-API rules do not apply.
         targetSdk = 28
 
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {

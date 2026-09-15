@@ -15,3 +15,14 @@ firetv/local.properties
 firetv/.idea/
 *.apk
 dist/
+
+# Device-specific and intermediate screenshots stay local.
+docs/ui-review/*.png
+!docs/ui-review/workspace-*.png
+!docs/ui-review/theme-*.png
+!docs/ui-review/home-*.png
+!docs/ui-review/beer-filling.png
+!docs/ui-review/beer-full.png
+!docs/ui-review/beer-revealed.png
+!docs/ui-review/ice-closing.png
+!docs/ui-review/curtain-closing.png

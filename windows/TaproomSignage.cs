@@ -2,7 +2,7 @@
 //
 // Keeps a node.exe child alive in the background, puts a tray icon in the
 // notification area, and can add itself to the per-user Run key so the server
-// comes back after a reboot without anyone opening a terminal.
+// comes back when the user signs in without anyone opening a terminal.
 //
 // Built with the .NET Framework compiler that ships with Windows, so there is
 // nothing to install to compile it. That compiler is C# 5, which is why there is
@@ -25,6 +25,7 @@ namespace Taproom
         [STAThread]
         static void Main(string[] args)
         {
+            bool startupLaunch = Array.IndexOf(args, "--startup") >= 0;
             foreach (string a in args)
             {
                 if (a == "--install-startup") { Startup.Enable(); return; }
@@ -37,7 +38,7 @@ namespace Taproom
             {
                 if (!isNew)
                 {
-                    MessageBox.Show("Taproom Signage is already running. Look for the tray icon.",
+                    if (!startupLaunch) MessageBox.Show("Taproom Signage is already running. Look for the tray icon.",
                         "Taproom Signage", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -53,11 +54,13 @@ namespace Taproom
     {
         public int Port = 8099;
         public string Password = "changeme";
+        public string DataDir;
 
         private readonly string path;
 
         public Config(string baseDir)
         {
+            DataDir = Path.Combine(baseDir, "data");
             path = Path.Combine(baseDir, "taproom.config");
             if (File.Exists(path)) Load(); else Save();
         }
@@ -78,12 +81,16 @@ namespace Taproom
                 if (key == "port")
                 {
                     int p;
-                    if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out p) && p > 0)
+                    if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out p) && p > 0 && p <= 65535)
                         Port = p;
                 }
                 else if (key == "password" && value.Length > 0)
                 {
                     Password = value;
+                }
+                else if (key == "data_dir" && value.Length > 0)
+                {
+                    DataDir = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path), value));
                 }
             }
         }
@@ -98,6 +105,9 @@ namespace Taproom
             sb.AppendLine("");
             sb.AppendLine("# CHANGE THIS before the screens go up anywhere public.");
             sb.AppendLine("password=" + Password);
+            sb.AppendLine("");
+            sb.AppendLine("# Optional existing data folder, relative to this file or an absolute path.");
+            sb.AppendLine("# data_dir=data");
             File.WriteAllText(path, sb.ToString());
         }
     }
@@ -112,8 +122,10 @@ namespace Taproom
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey, false))
             {
                 if (key == null) return false;
-                object value = key.GetValue(ValueName);
-                return value != null;
+                string value = key.GetValue(ValueName) as string;
+                string exe = "\"" + Application.ExecutablePath + "\"";
+                return string.Equals(value, exe, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(value, exe + " --startup", StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -121,7 +133,7 @@ namespace Taproom
         {
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey))
             {
-                key.SetValue(ValueName, "\"" + Application.ExecutablePath + "\"");
+                key.SetValue(ValueName, "\"" + Application.ExecutablePath + "\" --startup");
             }
         }
 
@@ -139,7 +151,7 @@ namespace Taproom
         private readonly NotifyIcon tray;
         private readonly string baseDir;
         private readonly string logPath;
-        private readonly Config config;
+        private Config config;
 
         private Process server;
         private bool stopping;
@@ -187,6 +199,9 @@ namespace Taproom
             tray.ContextMenuStrip = BuildMenu();
             tray.DoubleClick += delegate { OpenUrl("/"); };
 
+            Log("launcher: started " + Application.ExecutablePath);
+            Log("launcher: data folder " + config.DataDir);
+            Log("launcher: registered for sign-in at this path: " + Startup.IsEnabled());
             StartServer();
 
             if (config.IsDefaultPassword)
@@ -218,17 +233,26 @@ namespace Taproom
             menu.Items.Add(Item("Open display", delegate { OpenUrl("/display"); }));
             menu.Items.Add(new ToolStripSeparator());
 
-            startupItem = new ToolStripMenuItem("Start with Windows");
+            startupItem = new ToolStripMenuItem("Start when I sign in to Windows");
             startupItem.CheckOnClick = true;
             startupItem.Checked = Startup.IsEnabled();
             startupItem.Click += delegate
             {
-                if (startupItem.Checked) Startup.Enable(); else Startup.Disable();
+                try
+                {
+                    if (startupItem.Checked) Startup.Enable(); else Startup.Disable();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Could not change Windows startup:\n\n" + ex.Message,
+                        "Taproom Signage", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                startupItem.Checked = Startup.IsEnabled();
             };
             menu.Items.Add(startupItem);
 
             menu.Items.Add(Item("Settings", delegate { Open(config.Path_); }));
-            menu.Items.Add(Item("Data folder", delegate { Open(Path.Combine(baseDir, "data")); }));
+            menu.Items.Add(Item("Data folder", delegate { Open(config.DataDir); }));
             menu.Items.Add(Item("Log", delegate { Open(logPath); }));
             menu.Items.Add(new ToolStripSeparator());
 
@@ -254,10 +278,7 @@ namespace Taproom
             string entry = Path.Combine(baseDir, Path.Combine("app", Path.Combine("src", "server.js")));
             if (!File.Exists(entry))
             {
-                SetStatus("app\\src\\server.js is missing");
-                MessageBox.Show("Cannot find app\\src\\server.js next to the executable.\n\n" +
-                    "Unzip the whole folder and run it from there.",
-                    "Taproom Signage", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ScheduleRestart("app\\src\\server.js is missing; extract the whole package");
                 return;
             }
 
@@ -272,7 +293,8 @@ namespace Taproom
             psi.StandardErrorEncoding = Encoding.UTF8;
             psi.EnvironmentVariables["PORT"] = config.Port.ToString(CultureInfo.InvariantCulture);
             psi.EnvironmentVariables["ADMIN_PASSWORD"] = config.Password;
-            psi.EnvironmentVariables["DATA_DIR"] = Path.Combine(baseDir, "data");
+            psi.EnvironmentVariables["DATA_DIR"] = config.DataDir;
+            psi.EnvironmentVariables["HOST"] = "0.0.0.0";
 
             RollLog();
 
@@ -297,16 +319,17 @@ namespace Taproom
             }
             catch (Exception ex)
             {
-                SetStatus("Could not start");
-                Log("launcher: " + ex.Message);
-                MessageBox.Show("Could not start the server:\n\n" + ex.Message,
-                    "Taproom Signage", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                server.Exited -= ServerExited;
+                try { if (!server.HasExited) server.Kill(); } catch { }
+                server.Dispose();
+                server = null;
+                ScheduleRestart("Could not start: " + ex.Message);
             }
         }
 
         private string PortFile()
         {
-            return Path.Combine(Path.Combine(baseDir, "data"), "port");
+            return Path.Combine(config.DataDir, "port");
         }
 
         /// <summary>Waits for the server to report the port it managed to bind.</summary>
@@ -327,7 +350,7 @@ namespace Taproom
                     Log("launcher: port " + config.Port + " was unavailable; using " + p);
                     tray.ShowBalloonTip(7000, "Taproom Signage",
                         "Port " + config.Port + " was not available, so the server is on port " +
-                        p + " instead. Screens find it automatically.", ToolTipIcon.Info);
+                        p + " instead. Update manually entered TV addresses to this port.", ToolTipIcon.Info);
                 }
             }
             catch { /* try again on the next tick */ }
@@ -335,12 +358,21 @@ namespace Taproom
 
         private void ServerExited(object sender, EventArgs e)
         {
+            if (!object.ReferenceEquals(sender, server)) return;
             portWatch.Stop();
             if (stopping) return;
+            int exitCode = server.ExitCode;
+            server.Dispose();
+            server = null;
+            ScheduleRestart("server exited unexpectedly (code " + exitCode + ")");
+        }
+
+        private void ScheduleRestart(string reason)
+        {
             // A crash here is usually the port being taken. Keep trying, but back
             // off so a permanent problem does not spin the CPU all night.
-            restarts++;
-            Log("launcher: server exited unexpectedly (restart " + restarts + ")");
+            restarts = Math.Min(20, restarts + 1);
+            Log("launcher: " + reason + " (retry " + restarts + ")");
             restartTimer.Interval = Math.Min(60000, 3000 * restarts);
             SetStatus("Restarting in " + (restartTimer.Interval / 1000) + "s");
             restartTimer.Start();
@@ -354,7 +386,16 @@ namespace Taproom
 
         private void Restart()
         {
+            Config next;
+            try { next = new Config(baseDir); }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Could not read settings:\n\n" + ex.Message,
+                    "Taproom Signage", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             StopServer();
+            config = next;
             restarts = 0;
             StartServer();
         }
@@ -365,8 +406,10 @@ namespace Taproom
             restartTimer.Stop();
             portWatch.Stop();
             if (server == null) return;
-            try { if (!server.HasExited) server.Kill(); }
+            server.Exited -= ServerExited;
+            try { if (!server.HasExited) { server.Kill(); server.WaitForExit(5000); } }
             catch (Exception ex) { Log("launcher: could not stop server - " + ex.Message); }
+            server.Dispose();
             server = null;
         }
 
@@ -440,7 +483,14 @@ namespace Taproom
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && tray != null) tray.Dispose();
+            if (disposing)
+            {
+                StopServer();
+                restartTimer.Dispose();
+                portWatch.Dispose();
+                ui.Dispose();
+                if (tray != null) tray.Dispose();
+            }
             base.Dispose(disposing);
         }
     }

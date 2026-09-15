@@ -5,7 +5,7 @@
 // data must never be served stale — a bartender marking a keg kicked has to see
 // the truth, not a cached copy.
 
-const VERSION = 'v3';
+const VERSION = 'v13';
 const SHELL = 'shell-' + VERSION;
 
 const SHELL_FILES = [
@@ -15,9 +15,19 @@ const SHELL_FILES = [
   '/admin/core.js',
   '/admin/icons.js',
   '/admin/view-menu.js',
+  '/admin/view-home.js',
+  '/admin/view-workspace.js',
+  '/admin/navigation.js',
   '/admin/view-design.js',
   '/admin/view-system.js',
   '/shared/theme.js',
+  '/shared/poster-expiry.js',
+  '/display/beer-transition.js',
+  '/display/beer-liquid.js',
+  '/display/poster-transitions.js',
+  '/display/glass-curtain.js',
+  '/shared/transitions.js',
+  '/display/assets/beer-macro.png',
   '/shared/qr.js',
   '/manifest.webmanifest',
   '/icons/icon.svg'

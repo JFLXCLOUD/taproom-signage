@@ -3,22 +3,25 @@ import {
   currentBoard, toast, field
 } from './core.js';
 import { icon } from './icons.js';
+import { renderTVs, renderTV, renderLibrary, pairTV } from './view-workspace.js';
+import { navigate, readRoute } from './navigation.js';
 import { renderMenu } from './view-menu.js';
 import { renderDesign } from './view-design.js';
 import { renderScreens, renderSettings } from './view-system.js';
 
 const root = document.getElementById('root');
 
-const TABS = [
-  ['menu', 'Menu', 'list'],
-  ['design', 'Design', 'droplet'],
-  ['screens', 'Screens', 'monitor'],
-  ['settings', 'Settings', 'sliders']
-];
+const TABS = [['screens', 'TVs', 'monitor'], ['menus', 'Menus', 'list'], ['posters', 'Posters', 'image']];
 
 // ------------------------------------------------------------------ shell
 
 function render() {
+  // Live updates must not erase a form somebody is still filling in.
+  if (store.authed && document.querySelector('.shell[data-dirty=true]') && store.route === location.hash) {
+    const live = root.querySelector('.live');
+    if (live) { live.textContent = store.connected ? 'Connected' : 'Offline'; live.classList.toggle('off', !store.connected); }
+    return;
+  }
   clear(root);
 
   if (store.loading) {
@@ -30,23 +33,27 @@ function render() {
     return;
   }
 
-  const board = currentBoard();
+  const activeTab = ['tv', 'screens'].includes(store.tab) ? 'screens' : ['menu', 'design'].includes(store.tab) ? (currentBoard()?.layout === 'poster' ? 'posters' : 'menus') : store.tab;
   root.appendChild(
     h('div',
       h('header.topbar',
         h('h1', store.state.settings?.venue_name || 'Taproom Signage'),
-        h('span.live' + (store.connected ? '' : '.off'), store.connected ? 'Live' : 'Offline')),
+        h('span.live' + (store.connected ? '' : '.off'), store.connected ? 'Connected' : 'Offline'),
+        h('button.venue-button', { onclick: () => navigate('settings'), 'aria-label': 'Venue details and app tools' }, icon('sliders', 19), h('span', 'Venue'))),
       h('div.shell', viewFor(store.tab)),
       h('nav.tabs', ...TABS.map(([key, label, iconName]) =>
-        h('button' + (store.tab === key ? '.on' : ''), {
-          onclick: () => { store.tab = key; emit(); window.scrollTo(0, 0); }
+        h('button' + (activeTab === key ? '.on' : ''), {
+          'aria-current': activeTab === key ? 'page' : null,
+          onclick: () => navigate(key)
         }, h('span.ico', icon(iconName, 22)), label)))));
 }
 
 function viewFor(tab) {
   try {
+    if (tab === 'tv') return renderTV();
+    if (tab === 'menus' || tab === 'posters') return renderLibrary(tab);
     if (tab === 'design') return renderDesign();
-    if (tab === 'screens') return renderScreens();
+    if (tab === 'screens') return renderTVs();
     if (tab === 'settings') return renderSettings();
     return renderMenu();
   } catch (err) {
@@ -94,7 +101,10 @@ async function boot() {
     const me = await api.get('/api/auth/me');
     store.authed = me.authed;
     store.defaultPassword = me.defaultPassword;
-    if (me.authed) await refreshState();
+    if (me.authed) {
+      await refreshState();
+      if (store.pairCode) setTimeout(pairTV, 0);
+    }
   } catch (err) {
     if (err.status !== 401) toast('Cannot reach the server', true);
     store.authed = false;
@@ -104,6 +114,7 @@ async function boot() {
   }
 }
 
+readRoute();
 subscribe(render);
 connectLive();
 boot();

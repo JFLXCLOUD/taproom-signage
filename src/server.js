@@ -46,6 +46,7 @@ function safeVenueName() {
 
 /** [method, path pattern, handler, requiresAuth] — :params become named groups. */
 const routes = [
+  ['POST',   '/api/publish',           api.publishContent, true],
   ['GET',    '/api/health',            (q, s) => json(s, 200, {
     ok: true, app: 'taproom-signage', name: safeVenueName(),
     revision: store.getRevision(), displays: api.clientCount()
@@ -62,6 +63,7 @@ const routes = [
   ['GET',    '/api/playlist/:slug',    api.getPlaylistPayload, false],
   ['POST',   '/api/device/register',   api.registerDevice,  false],
   ['GET',    '/api/device/:id',        api.resolveDevice,   false],
+  ['GET',    '/api/device/:id/preview', (q, s, p) => api.resolveDevice(q, s, { ...p, preview: true }), false],
 
   ['GET',    '/api/state',             api.getState,       true],
   ['POST',   '/api/settings',          api.patchSettings,  true],
@@ -184,8 +186,8 @@ maybeSeed();
  *
  * Windows reserves whole port ranges (Hyper-V and WinNAT do this), so a fixed
  * 8080 fails outright on plenty of machines with EACCES rather than EADDRINUSE.
- * Drifting the port is safe here because nothing hard-codes it: screens find the
- * server over UDP discovery, which advertises whatever port we actually got.
+ * Portable trials can advertise a fallback port through local UDP discovery.
+ * Installed services set PORT_FALLBACK=0 to keep routed/manual addresses stable.
  */
 function listenWithFallback(startPort, attemptsLeft) {
   // Both listeners must come off before retrying. Leaving the 'listening' one
@@ -200,7 +202,7 @@ function listenWithFallback(startPort, attemptsLeft) {
   const onError = (err) => {
     cleanup();
     const recoverable = err.code === 'EADDRINUSE' || err.code === 'EACCES';
-    if (!recoverable || attemptsLeft <= 0) {
+    if (!recoverable || attemptsLeft <= 0 || startPort >= 65535) {
       console.error(`  Cannot listen on port ${startPort}: ${err.code || err.message}`);
       process.exit(1);
     }
@@ -248,7 +250,8 @@ function onListening(port) {
   console.log('');
 }
 
-listenWithFallback(PORT, 10);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be from 1 to 65535');
+listenWithFallback(PORT, process.env.PORT_FALLBACK === '0' ? 0 : 10);
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

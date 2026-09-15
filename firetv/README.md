@@ -3,13 +3,15 @@
 A full-screen kiosk for a Fire TV Stick. It finds the signage server on the LAN by
 itself, remembers it, shows the board, and comes back after a power cut.
 
-No address is ever typed into the TV.
+Automatic discovery works on the local subnet. For another Wi-Fi/VLAN, press
+**MENU > Enter address** and enter the server URL including its port. Manual
+addresses stay pinned across outages; **Search again** explicitly clears them.
+The router must allow TCP traffic from the TV subnet to the server.
 
-> **Not yet built or run on hardware.** This source was written without an Android
-> SDK available, so it has never been compiled or put on a stick. The protocol half
-> *is* tested — the server side and the handshake are exercised by
-> `npm run find` and `npm run check:firetv` from the repo root. Treat the app as a
-> solid first draft that needs a build and a device pass, not a finished binary.
+GitHub Actions compiles the APK. Reboot behavior and animation performance still
+need verification on physical Fire TV hardware. APKs currently use debug signing;
+if Android reports a signature mismatch when upgrading an older build, uninstall
+the older app first, then reinstall and pair the TV again.
 
 ---
 
@@ -18,7 +20,7 @@ No address is ever typed into the TV.
 | | |
 | --- | --- |
 | **Finds the server** | Remembered address → UDP broadcast → sweep of the local /24 |
-| **Survives a move** | Three failed loads and it forgets the address and searches again |
+| **Survives a move** | Auto-discovered addresses can be rediscovered; manually entered addresses stay saved |
 | **Survives an outage** | The board caches its last menu, so the screen keeps showing it |
 | **Starts on boot** | `BOOT_COMPLETED` receiver relaunches it after a power cut |
 | **Stays on** | `FLAG_KEEP_SCREEN_ON`, immersive fullscreen, BACK is swallowed |
@@ -50,7 +52,7 @@ Needs JDK 17 and the Android SDK (Android Studio installs both).
 
 ```bash
 cd firetv
-./gradlew assembleDebug
+gradle assembleDebug
 # app/build/outputs/apk/debug/app-debug.apk
 ```
 

@@ -1,5 +1,58 @@
 # Taproom Signage
 
+## Everyday controls
+
+The app has three destinations: **TVs**, **Menus**, and **Posters**.
+
+- **TVs:** open a named TV. **Choose what plays** selects menus, posters, order, and duration.
+  **Screen setup** changes its name and orientation. Edit a menu or poster directly from its
+  playback list; the editor has a back button to return to that TV.
+- **Menus:** open a menu, search for an item, then tap its name or price. Name, price, availability,
+  and visibility come first; drink details and images are optional. Choose **Reorder** to move items.
+- **Posters:** add artwork or event text, choose TVs, review, and publish. Leave TVs unchecked to
+  save for later. Finished artwork fits fully on screen.
+- **Appearance:** inside a menu or poster, try a theme in the live preview, then **Save appearance**.
+  TVs change only when saved. Includes Parisian Bistro, Coastal, Marquee, Fresh Market, and Stadium.
+- **Show on TV:** inside an editor, add that content to selected TVs, alongside current playback
+  or on its own. Editing shared content updates every TV that uses it. Playback and orientation
+  choices only affect the TV being changed.
+- **Venue:** the labelled header button opens the shared name, logo, and currency. Backups and
+  saved rotations are under **App tools & backups**.
+
+Orientation belongs to each TV and applies to every scene. Existing installations keep their
+previous content orientation until a TV-specific choice is saved. Previews do not mark TVs online.
+Publishing starts immediately when connected. Event dates are display text, not playback scheduling.
+Remove expired posters with **TVs > open a TV > Choose what plays**.
+
+### Automatic poster removal
+
+When creating or editing a poster, optionally set **Remove from TVs on** to the day after the
+event. It stops showing at midnight at the start of that date, in the timezone shown beside
+the field (the server's timezone). The poster stays in the Posters library with an expired
+label. Change or clear its removal date to use it again.
+
+Rotations skip expired posters, including during cached offline playback. If nothing active
+remains, the TV shows a neutral **No active content** message and stays paired. Date removal
+does not restore content previously replaced by a poster; add a menu alongside it if you want
+that menu to remain after the event.
+
+### Menu-to-poster transitions
+
+Open a menu > **Appearance > When this menu changes to a poster**, choose an effect,
+then **Save appearance**. Each effect has a preview button that does not save changes.
+
+- **Beer fill & drain:** photographic beer, foam and splashes fill the panel, then drain (about 6 seconds).
+- **Ice-cold glass:** condensation fogs the screen, droplets slide down, then a clearing sweep reveals the poster (about 4.7 seconds).
+- **Stage curtain:** shaded red velvet curtains close, pause, then open onto the poster (about 4.3 seconds).
+
+Effects run only from menu to poster and preserve the poster's full display duration.
+Both portrait directions work. Reduced-motion preferences skip automatic transitions;
+explicit preview requests still play. TV-context previews use that TV's orientation.
+The effects are local Canvas animations with no remote assets required for ice or curtains.
+Physical TV smoothness still needs hardware testing.
+
+[Screenshots and validation notes](docs/ui-review/README.md).
+
 Self-hosted digital signage for a bar or restaurant menu. A TV (Fire TV Stick, old laptop,
 Raspberry Pi — anything with a browser) shows the board; you update it from an installable
 phone app. Changes appear on every screen in well under a second.
@@ -31,24 +84,27 @@ Then open:
 | Display, direct | <http://localhost:8080/d/main> |
 | Display, rotation | <http://localhost:8080/p/evening-loop> |
 
-Default password is `changeme`. The app warns you until you change it.
+Default password is `changeme`. The server log notes when the default password is in use.
 
 The first run seeds a demo board (10 taps, cocktails, a food section) so there is something
 real on screen. Set `SEED_DEMO=0` to start empty.
 
-### Windows (no install)
+### Windows server installer
 
-Download `TaproomSignage-win-x64.zip` from the
-[Releases page](https://github.com/JFLXCLOUD/taproom-signage/releases), unzip it
-anywhere, and run `TaproomSignage.exe`. Node is bundled — nothing to install.
+Download **TaproomSignage-Setup-win-x64.exe** from the
+[Releases page](https://github.com/JFLXCLOUD/taproom-signage/releases). Setup installs
+an automatic Windows service, configures the firewall for local and routed private
+networks, and asks for your control password and fixed port. The server runs before
+sign-in. The desktop shortcut shows connection addresses for your phone and TVs.
 
-A tray icon appears near the clock. Right-click it for the control app, the display,
-settings, the log, and a **Start with Windows** toggle so the server returns after a
-reboot. If the server ever dies the launcher restarts it with a backoff.
+For TVs on another Wi-Fi/VLAN, press **MENU > Enter address** on the Fire TV remote.
+Your router must allow access to the server's TCP port (default **8099**).
+[Installation, supported Windows versions, network rules, migration, and troubleshooting](docs/windows-install.md).
 
-The port lives in `taproom.config` (default 8099). If it is taken or reserved — Windows
-reserves whole ranges, so even 8080 fails on some machines — the server steps to the
-next free port and tells you. Screens do not care: they find the server over UDP.
+The portable ZIP is still available for trials: extract the whole folder and run
+`TaproomSignage.exe`. Its tray startup is **at sign-in** and does not configure the
+firewall. Build with `node scripts/build-windows.mjs --setup --release-only` to
+produce both downloads without modifying a running portable installation.
 
 ### Docker
 
@@ -92,7 +148,7 @@ There are two kinds of board and one way to sequence them:
   an event, a special, or a "kitchen closes at 10" notice. It is still a board, so it inherits
   your theme, works on a direct link, and can be pinned to a screen on its own.
 - **Rotation** — an ordered list of boards with a duration each. Menu for two minutes, event
-  poster for twenty seconds, back to the menu. Build it under *Screens → Rotations*, then point
+  poster for twenty seconds, back to the menu. Build it under *Venue > App tools & backups > Saved rotations*, then point
   a screen at it (or open `/p/<slug>` directly).
 
 A screen shows **either** one board or one rotation — picking one clears the other, so a screen
@@ -125,7 +181,7 @@ devices (a paired screen) point at exactly one board OR one playlist.
 1. **Install a browser.** Amazon Silk works. [Fully Kiosk Browser](https://www.fully-kiosk.com/)
    is much better for signage — sideload it with `adb install`.
 2. **Open the display.** Either `http://<server>:8080/display` (shows a 6-character pairing
-   code — type it into the PWA's *Screens* tab) or go straight to `http://<server>:8080/d/main`.
+   code — type it into the PWA's *TVs* tab) or go straight to `http://<server>:8080/d/main`.
    Pairing is worth it: you can then change which board a TV shows from your phone, without
    touching the remote again.
 3. **Stop the screensaver.** Settings → Display & Sounds → Screensaver → *Start After: Never*.
@@ -138,25 +194,20 @@ blank overnight. Reserve its IP on your router, or use a hostname.
 
 ### Portrait mounting
 
-Set *Design → Orientation* to **Portrait — rotate right** (or left, depending which way the TV
-is turned). The stick still sends 1920×1080; the board is rotated inside that picture. Set
-*Columns* to 1 or Auto at the same time.
+Open **TVs > your TV > Screen setup**. Choose **Tall / rotated right** if the TV was physically
+turned clockwise, or **Tall / rotated left** for counter-clockwise. Save and look at the screen;
+if it is upside down, choose the other direction. Every menu and poster on this TV follows that
+setting, even when the same content also plays on a landscape TV.
 
----
+If the player already outputs portrait, expand **Already rotated by the TV or player?** and
+let the player handle orientation.
 
-## Using it behind the bar
+### Updating a menu
 
-The *Menu* tab is built for one-handed use mid-shift:
-
-- **Tap the status pill** to cycle Pouring → Almost gone → Kicked → Coming soon. This is the
-  thing you do most, so it is one tap and no dialog.
-- **Tap an item** to edit everything: prices per size, ABV, IBU, badge ("Rare", "Cask"), colour.
-- **▲▼** reorders taps.
-- Kicked items stay visible with a strikethrough. Hide them entirely with *Hide from display*.
-
-The *Design* tab has a live preview and edits **the current board**. "Copy this design to all
-other boards" pushes it everywhere. Prices are printed verbatim if they are not plain numbers,
-so `MKT` or `8/12` work as typed.
+Open **Menus**, choose a named menu, search for an item, then tap its name or price. Save the edit.
+Availability choices are Available, Running low, Sold out, and Coming soon. Hidden items remain
+editable in the app. Themes and display fields are in that menu's **Appearance** tab, with an
+explicit save. Prices such as `MKT` or `8/12` display as typed.
 
 ---
 
@@ -227,7 +278,7 @@ by itself, remembers it, and restarts on boot — no address is ever typed into 
 `npm run find` runs the same discovery handshake from your laptop, and
 `npm run check:firetv` asserts the app and server halves of the protocol still agree.
 
-The app source has not been compiled or run on hardware; see its README.
+GitHub Actions builds the APK; physical Fire TV testing is still needed. See its README.
 
 ## Backup
 

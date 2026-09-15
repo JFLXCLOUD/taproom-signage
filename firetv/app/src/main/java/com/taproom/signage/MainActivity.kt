@@ -40,10 +40,13 @@ class MainActivity : Activity() {
     private var baseUrl: String? = null
     private var consecutiveFailures = 0
     private var searching = false
+    private var connectionGeneration = 0
+    private var manualAddress = false
 
     companion object {
         private const val PREFS = "taproom"
         private const val KEY_URL = "base_url"
+        private const val KEY_MANUAL = "manual_address"
         private const val RETRY_MS = 5000L
         /** After this many failed loads, stop retrying the address and look again. */
         private const val REDISCOVER_AFTER = 3
@@ -79,6 +82,7 @@ class MainActivity : Activity() {
         setContentView(root)
 
         baseUrl = prefs.getString(KEY_URL, null)
+        manualAddress = prefs.getBoolean(KEY_MANUAL, false)
         connect()
     }
 
@@ -107,12 +111,14 @@ class MainActivity : Activity() {
         searching = true
         showStatus(getString(R.string.searching))
 
-        Discovery.resolve(baseUrl) { found ->
+        val generation = connectionGeneration
+        Discovery.resolve(baseUrl, manualAddress) { found ->
             main.post {
+                if (generation != connectionGeneration || isFinishing) return@post
                 searching = false
                 if (found == null) {
                     showStatus(getString(R.string.not_found))
-                    main.postDelayed({ connect() }, 15000)
+                    main.postDelayed({ if (generation == connectionGeneration) connect() }, 15000)
                 } else {
                     if (found != baseUrl) {
                         baseUrl = found
@@ -134,14 +140,15 @@ class MainActivity : Activity() {
         consecutiveFailures++
         showStatus(getString(R.string.cannot_reach, baseUrl ?: "?", reason))
 
-        if (consecutiveFailures >= REDISCOVER_AFTER) {
+        val generation = connectionGeneration
+        if (consecutiveFailures >= REDISCOVER_AFTER && !manualAddress) {
             // The server has probably moved (new DHCP lease, different box).
             consecutiveFailures = 0
             baseUrl = null
             prefs.edit().remove(KEY_URL).apply()
-            main.postDelayed({ connect() }, 2000)
+            main.postDelayed({ if (generation == connectionGeneration) connect() }, 2000)
         } else {
-            main.postDelayed({ load() }, RETRY_MS)
+            main.postDelayed({ if (generation == connectionGeneration) load() }, RETRY_MS)
         }
     }
 
@@ -220,8 +227,11 @@ class MainActivity : Activity() {
             .setTitle(getString(R.string.menu_title))
             .setMessage(getString(R.string.menu_current, baseUrl ?: getString(R.string.none)))
             .setPositiveButton(R.string.menu_search) { _, _ ->
+                connectionGeneration++
+                searching = false
+                manualAddress = false
                 baseUrl = null
-                prefs.edit().remove(KEY_URL).apply()
+                prefs.edit().remove(KEY_URL).putBoolean(KEY_MANUAL, false).apply()
                 connect()
             }
             .setNeutralButton(R.string.menu_manual) { _, _ -> promptForAddress() }
@@ -244,11 +254,19 @@ class MainActivity : Activity() {
             .setTitle(R.string.manual_title)
             .setView(box)
             .setPositiveButton(R.string.save) { _, _ ->
-                val entered = input.text.toString().trim().trimEnd('/')
-                if (entered.startsWith("http")) {
+                var entered = input.text.toString().trim().trimEnd('/')
+                if (!entered.contains("://")) entered = "http://$entered"
+                val uri = try { java.net.URI(entered) } catch (_: Exception) { null }
+                if (uri != null && uri.scheme in listOf("http", "https") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && (uri.path.isNullOrEmpty() || uri.path == "/") && (uri.port == -1 || uri.port in 1..65535)) {
+                    connectionGeneration++
+                    searching = false
+                    manualAddress = true
+                    consecutiveFailures = 0
                     baseUrl = entered
-                    prefs.edit().putString(KEY_URL, entered).apply()
+                    prefs.edit().putString(KEY_URL, entered).putBoolean(KEY_MANUAL, true).apply()
                     load()
+                } else {
+                    AlertDialog.Builder(this).setMessage(R.string.invalid_address).setPositiveButton(R.string.cancel, null).show()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -256,6 +274,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        connectionGeneration++
+        main.removeCallbacksAndMessages(null)
         web.destroy()
         super.onDestroy()
     }

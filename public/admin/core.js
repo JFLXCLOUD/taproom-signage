@@ -88,7 +88,7 @@ export const store = {
   defaultPassword: false,
   loading: true,
   connected: false,
-  tab: scannedPair ? 'screens' : 'menu',
+  tab: scannedPair ? 'screens' : 'home',
   boardId: null,
   state: { settings: {}, boards: [], devices: [], revision: 0 }
 };
@@ -96,6 +96,18 @@ export const store = {
 const listeners = new Set();
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 export function emit() { for (const fn of listeners) fn(); }
+
+export function markDirty() {
+  const shell = document.querySelector('.shell');
+  if (shell) shell.dataset.dirty = 'true';
+}
+export function clearDirty() {
+  const shell = document.querySelector('.shell');
+  if (shell) delete shell.dataset.dirty;
+}
+window.addEventListener('beforeunload', event => {
+  if (document.querySelector('.shell[data-dirty=true]')) { event.preventDefault(); event.returnValue = ''; }
+});
 
 export function currentBoard() {
   const boards = store.state.boards || [];
@@ -163,9 +175,19 @@ export function toast(message, isError) {
 // ------------------------------------------------------------------ sheet
 
 /** Bottom sheet modal. onSave returns false to keep it open. */
-export function sheet({ title, body, saveLabel = 'Save', onSave, extra }) {
+export function sheet({ title, body, saveLabel = 'Save', onSave, extra, onClose }) {
   const backdrop = h('div.sheet-backdrop');
-  const close = () => backdrop.remove();
+  const previousFocus = document.activeElement;
+  const close = () => { backdrop.remove(); previousFocus?.focus(); onClose?.(); };
+  backdrop.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Tab') {
+      const focusable = [...backdrop.querySelectorAll('button, input, select, textarea, summary, a[href]')].filter(n => !n.disabled && n.getClientRects().length);
+      const first = focusable[0], last = focusable.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  });
 
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
@@ -175,13 +197,15 @@ export function sheet({ title, body, saveLabel = 'Save', onSave, extra }) {
     try {
       const ok = await onSave();
       if (ok !== false) close();
+    } catch (err) {
+      toast(err.message || 'Could not save. Please try again.', true);
     } finally {
       saveBtn.disabled = false;
     }
   });
 
   backdrop.appendChild(
-    h('div.sheet', { role: 'dialog', 'aria-modal': 'true' },
+    h('div.sheet', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div.sheet-head',
         h('h2', title),
         h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: close }, 'Close')),
@@ -190,6 +214,7 @@ export function sheet({ title, body, saveLabel = 'Save', onSave, extra }) {
   );
 
   document.body.appendChild(backdrop);
+  backdrop.querySelector('input, button')?.focus();
   return { close, el: backdrop };
 }
 
@@ -199,6 +224,7 @@ export function confirmSheet(title, message, confirmLabel = 'Delete') {
       title,
       body: h('p', { style: { margin: '4px 0 8px', color: 'var(--muted)' } }, message),
       saveLabel: confirmLabel,
+      onClose: () => resolve(false),
       onSave: () => { resolve(true); return true; }
     });
     s.el.addEventListener('click', (e) => { if (e.target === s.el) resolve(false); });
@@ -207,8 +233,11 @@ export function confirmSheet(title, message, confirmLabel = 'Delete') {
 
 // ------------------------------------------------------------------ fields
 
+let fieldId = 0;
 export function field(label, control, hint) {
-  return h('div.field', h('label', label), control, hint ? h('div.hint', hint) : null);
+  const target = control.matches?.('input, select, textarea') ? control : control.querySelector?.('input, select, textarea');
+  if (target && !target.id) target.id = 'field-' + (++fieldId);
+  return h('div.field', h('label', { for: target?.id }, label), control, hint ? h('div.hint', hint) : null);
 }
 
 export function input(props = {}) {
@@ -260,6 +289,7 @@ export function pickImage({ maxSize = 640, quality = 0.86 } = {}) {
       }
     });
 
+    picker.addEventListener('cancel', () => { picker.remove(); resolve(null); });
     picker.click();
   });
 }

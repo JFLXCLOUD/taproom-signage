@@ -1,6 +1,8 @@
 import {
-  h, api, store, mutate, sheet, confirmSheet, field, input, select, toast, uploadImage, refreshState
+  h, api, store, mutate, sheet, confirmSheet, field, input, select, toast, uploadImage, refreshState, markDirty, clearDirty, emit
 } from './core.js';
+import { navigate } from './navigation.js';
+import { tvCard, pageHeading } from './view-home.js';
 import { icon } from './icons.js';
 
 // ================================================================== screens
@@ -9,42 +11,18 @@ export function renderScreens() {
   const devices = store.state.devices || [];
   const boards = store.state.boards || [];
 
-  return h('div',
-    h('div.card',
-      h('div.card-head', h('h2', 'Pair a screen')),
-      h('div.card-body',
-        h('p.hint', { style: { marginTop: '0' } },
-          store.pairCode
-          ? h('span', 'Code scanned from the screen. Pick what it should show, then pair it.')
-          : h('span', 'On the TV, open ', h('strong', location.host + '/display'),
-              ' in the browser. Scan the QR code it shows, or type its six-character code here.')),
-        pairForm(boards))),
-
+  const advanced = h('details.advanced', h('summary', 'Advanced TV controls & saved rotations'),
     rotationsCard(),
-
-    h('div.section-title', 'Paired screens'),
-    devices.length
-      ? h('div.card', h('div.card-body.tight', ...devices.map(d => deviceRow(d, boards))))
-      : h('div.empty', h('p', 'No screens paired yet.')),
-
-    devices.length
-      ? h('button.btn.btn-block', { style: { marginTop: '12px' },
-          onclick: () => mutate(() => api.post('/api/devices/command', { action: 'reload' }),
-            'Reload sent to every screen') }, icon('refresh', 17), 'Reload all screens')
-      : null,
-
-    h('div.section-title', 'Direct links'),
-    h('div.card', h('div.card-body',
-      h('p.hint', { style: { marginTop: '0' } },
-        'You can skip pairing and point a screen straight at a board:'),
-      ...boards.map(b => h('div', { style: { marginBottom: '8px' } },
-        h('strong', b.name), h('br'),
-        h('code', { style: { color: 'var(--muted)', fontSize: '13px', wordBreak: 'break-all' } },
-          `${location.origin}/d/${b.slug}`))),
-      ...(store.state.playlists || []).map(p => h('div', { style: { marginBottom: '8px' } },
-        h('strong', p.name + ' (rotation)'), h('br'),
-        h('code', { style: { color: 'var(--muted)', fontSize: '13px', wordBreak: 'break-all' } },
-          `${location.origin}/p/${p.slug}`))))));
+    ...devices.map(d => deviceRow(d, boards)),
+    h('button.btn.btn-block', { onclick: () => mutate(() => api.post('/api/devices/command', { action: 'reload' }), 'Reload sent') }, 'Reload all TVs'),
+    h('h3', 'Direct display links'),
+    ...boards.map(b => h('p.hint', h('a', { href: '/d/' + b.slug, target: '_blank', rel: 'noopener' }, b.name))));
+  return h('div',
+    pageHeading('Your TVs', 'Choose what plays on each TV. Select several menus or posters to play them in a loop.'),
+    devices.length ? h('div.tv-grid', ...devices.map(tvCard)) : h('p.hint', 'No TVs yet. Start with the pairing code on your TV.'),
+    h('details.advanced', { open: !!store.pairCode || !devices.length }, h('summary', 'Pair a new TV'),
+      h('p.hint', store.pairCode ? 'Code scanned. Name this TV and choose its first menu or poster.' : 'Open ' + location.host + '/display on your TV. Scan its QR code or enter the six-character code below.'),
+      pairForm(boards)), advanced);
 }
 
 // ---------------------------------------------------------------- rotations
@@ -294,77 +272,37 @@ function timeAgo(ts) {
 
 export function renderSettings() {
   const s = store.state.settings || {};
-
-  const venue = h('input.input', { value: s.venue_name || '' });
-  const tagline = h('input.input', { value: s.tagline || '' });
-  const currency = h('input.input', { value: s.currency || '$', maxlength: '3' });
-
-  const logoPreview = h('div', { style: { marginBottom: '10px' } },
-    s.logo
-      ? h('img', { src: '/u/' + s.logo, alt: '',
-          style: { maxHeight: '64px', maxWidth: '100%', background: '#fff2', borderRadius: '8px', padding: '6px' } })
-      : h('span.hint', 'No logo set'));
-
-  return h('div',
-    store.defaultPassword
-      ? h('div.banner',
-          h('strong', 'Default password in use. '),
-          'Set ADMIN_PASSWORD in your environment (or docker-compose.yml) and restart before exposing this outside your LAN.')
-      : null,
-
-    h('div.card',
-      h('div.card-head', h('h2', 'Venue')),
-      h('div.card-body',
-        field('Name', venue),
-        field('Tagline', tagline),
-        field('Currency symbol', currency),
-        field('Logo', h('div', logoPreview,
-          h('div.row-btns',
-            h('button.btn.btn-sm', {
-              onclick: async () => {
-                try {
-                  const id = await uploadImage({ maxSize: 512 });
-                  if (id) await mutate(() => api.post('/api/settings', { logo: id }), 'Logo updated');
-                } catch (err) { toast(err.message, true); }
-              }
-            }, icon('upload', 15), s.logo ? 'Replace logo' : 'Upload logo'),
-            s.logo
-              ? h('button.btn.btn-sm.btn-danger', {
-                  onclick: () => mutate(() => api.post('/api/settings', { logo: null }), 'Logo removed')
-                }, icon('trash', 15), 'Remove')
-              : null)),
-          'A wide PNG with a transparent background works best.'),
-        h('button.btn.btn-primary.btn-block', {
-          onclick: () => mutate(() => api.post('/api/settings', {
-            venue_name: venue.value.trim(),
-            tagline: tagline.value.trim(),
-            currency: currency.value.trim() || '$'
-          }), 'Saved')
-        }, 'Save venue details'))),
-
-    h('div.card',
-      h('div.card-head', h('h2', 'Backup')),
-      h('div.card-body',
-        h('div.row-btns',
-          h('a.btn.btn-sm', { href: '/api/export', download: '' },
-            icon('upload', 15), 'Download backup'),
-          h('button.btn.btn-sm', { onclick: importBackup },
-            icon('refresh', 15), 'Restore from file')),
-        h('div.hint', 'The backup holds every board, section, item and price as JSON. Images are not included.'))),
-
-    h('div.card',
-      h('div.card-head', h('h2', 'Running it on a Fire TV Stick')),
-      h('div.card-body',
-        h('ol', { style: { margin: '0', paddingLeft: '20px', color: 'var(--muted)', lineHeight: '1.6' } },
-          h('li', 'Install a browser on the stick — Amazon Silk works, Fully Kiosk Browser is better.'),
-          h('li', h('span', 'Open '), h('strong', location.host + '/display'), ' and pair the code.'),
-          h('li', 'Settings → Display & Sounds → Screensaver → set Start After to Never.'),
-          h('li', 'In Fully Kiosk, enable Keep Screen On and Start on Boot so it survives a power cut.')),
-        h('div.hint', 'The board keeps showing its last menu even if this server goes offline.'))),
-
-    h('button.btn.btn-block', { style: { marginTop: '16px' },
-      onclick: async () => { await api.post('/api/auth/logout'); location.reload(); } },
-      icon('power', 17), 'Sign out'));
+  let logo = s.logo || null;
+  const venue = input({ value: s.venue_name || '' });
+  const tagline = input({ value: s.tagline || '' });
+  const currency = input({ value: s.currency || '$', maxlength: 3 });
+  const logoPreview = h('div.poster-upload-preview');
+  const draw = () => logoPreview.replaceChildren(logo ? h('img', { src: '/u/' + logo, alt: 'Venue logo' }) : h('p', 'No logo added yet'));
+  draw();
+  const upload = h('button.btn', { onclick: async () => {
+    upload.disabled = true;
+    try { const id = await uploadImage({ maxSize: 512 }); if (id) { logo = id; draw(); markDirty(); } }
+    catch (err) { toast(err.message, true); }
+    finally { upload.disabled = false; }
+  } }, 'Choose logo');
+  const save = h('button.btn.btn-primary', { onclick: async () => {
+    if (!venue.value.trim()) return toast('Enter your venue name.', true);
+    save.disabled = true;
+    try {
+      if (await mutate(() => api.post('/api/settings', { venue_name: venue.value.trim(), tagline: tagline.value.trim(), currency: currency.value.trim() || '$', logo }), 'Venue details saved')) { clearDirty(); emit(); }
+    } finally { save.disabled = false; }
+  } }, 'Save venue details');
+  return h('div', { oninput: markDirty, onchange: markDirty },
+    h('button.back-link', { onclick: () => navigate('screens') }, 'Back to TVs'),
+    pageHeading('Venue details', 'Your name, logo, and currency appear across your menus.'),
+    h('div.card', h('div.card-body', field('Venue name', venue), field('Tagline', tagline, 'A short line below your venue name.'), field('Currency symbol', currency),
+      logoPreview, h('div.row-btns', upload, h('button.btn', { onclick: () => { logo = null; draw(); markDirty(); } }, 'Remove logo')),
+      h('div.save-bar', h('span.hint', 'These details apply to all TVs.'), save))),
+    h('details.advanced', h('summary', 'App tools & backups'),
+      h('div.row-btns', h('a.btn', { href: '/api/export', download: '' }, 'Download backup'), h('button.btn', { onclick: importBackup }, 'Restore backup')),
+      h('p.hint', 'Backups include menus and posters. Uploaded images must be backed up separately.'),
+      h('details.advanced', h('summary', 'Saved rotations'), rotationsCard()),
+      h('button.btn', { onclick: async () => { if (document.querySelector('.shell[data-dirty=true]') && !confirm('Discard unsaved venue details and sign out?')) return; clearDirty(); await api.post('/api/auth/logout'); location.reload(); } }, 'Sign out')));
 }
 
 function importBackup() {

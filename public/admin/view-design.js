@@ -1,7 +1,10 @@
 import {
-  h, api, store, currentBoard, mutate, field, select, toggle, colorField, toast, refreshState
+  h, api, store, currentBoard, mutate, field, select, toggle, colorField, toast, refreshState, markDirty, clearDirty, emit, sheet
 } from './core.js';
+import { assignedTo } from './view-home.js';
+import { editorHeader, navigate, editorPreviewTheme, contentPreviewUrl } from './navigation.js';
 import { PRESETS, FONT_STACKS, ORIENTATIONS, resolveTheme, rotationFor } from '../shared/theme.js';
+import { POSTER_TRANSITIONS } from '../shared/transitions.js';
 
 const FONT_LABELS = {
   system: 'System', condensed: 'Condensed (Oswald)', grotesk: 'Grotesk (Inter)',
@@ -10,57 +13,53 @@ const FONT_LABELS = {
 };
 
 let previewEl = null;
-let saveTimer = null;
-let pending = {};
+
 
 export function renderDesign() {
-  const board = currentBoard();
-  if (!board) return h('div.empty', h('p', 'Create a board first.'));
-
-  const theme = resolveTheme(store.state.settings?.theme, board.theme);
-
-  // Buffer edits: a slider fires dozens of events, but the board only needs
-  // the last one. Everything re-renders from server state after the flush.
-  const set = (patch, immediate) => {
-    pending = { ...pending, ...patch };
+  const saved = store.state.boards.find(b => b.id === store.boardId);
+  if (!saved) return h('div.empty', h('p', 'Choose a menu or poster first.'), h('button.btn', { onclick: () => navigate('menus') }, 'Back to menus'));
+  const board = { ...saved, theme: { ...saved.theme } };
+  let theme = resolveTheme(store.state.settings?.theme, board.theme);
+  const status = h('span.save-status', { 'aria-live': 'polite' }, 'No unsaved changes');
+  const presets = h('div');
+  const custom = h('div');
+  const set = patch => {
     Object.assign(board.theme, patch);
-    updatePreviewFrame(resolveTheme(store.state.settings?.theme, board.theme));
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(flush, immediate ? 0 : 420);
+    theme = resolveTheme(store.state.settings?.theme, board.theme);
+    markDirty(); status.textContent = 'Unsaved changes';
+    updatePreviewFrame(theme);
+    previewEl?.iframe.contentWindow?.postMessage({ type: 'preview-theme', theme: editorPreviewTheme(theme) }, location.origin);
+    if (patch.preset) draw();
   };
-
-  const flush = async () => {
-    const patch = pending;
-    pending = {};
-    if (!Object.keys(patch).length) return;
+  const draw = () => {
+    presets.replaceChildren(presetCard(theme, set));
+    custom.replaceChildren(...(board.layout === 'poster' ? [] : [fieldsCard(theme, set)]), colorsCard(theme, set), typeCard(theme, set));
+  };
+  draw();
+  const save = h('button.btn.btn-primary', { onclick: async () => {
+    save.disabled = true;
     try {
-      await api.patch('/api/boards/' + board.id, { theme: patch });
-      await refreshState();
-      reloadPreview();
-    } catch (err) {
-      toast(err.message, true);
-    }
-  };
-
-  return h('div',
-    previewCard(board, theme),
-    presetCard(theme, set),
-    layoutCard(theme, set),
-    fieldsCard(theme, set),
-    colorsCard(theme, set),
-    typeCard(theme, set),
-    h('div.section-title', 'Apply elsewhere'),
-    h('button.btn.btn-block', { onclick: () => copyToAllBoards(board) },
-      'Copy this design to all other boards'));
+      if (await mutate(() => api.patch('/api/boards/' + board.id, { theme: board.theme }), 'Appearance saved')) { clearDirty(); emit(); }
+    } finally { save.disabled = false; }
+  } }, 'Save appearance');
+  return h('div', editorHeader(board, 'look'),
+    h('p.content-scope', assignedTo(board.id), '. This appearance is shared wherever this content plays.'),
+    h('div.save-bar.appearance-save', status, save),
+    h('div.appearance-workspace',
+      h('div.appearance-preview', previewCard(board, theme), h('p.hint', 'Try a theme below. Your TVs change only when you save.')),
+      h('div', presets, board.layout === 'poster' ? h('p.hint', 'To change artwork fit or text placement, return to Artwork & text.') : layoutCard(theme, set, () => theme),
+        h('details.advanced', h('summary', 'More appearance options'), custom))));
 }
 
 // ------------------------------------------------------------------ preview
 
 function previewCard(board, theme) {
+  theme = editorPreviewTheme(theme);
+  const tv = store.state.devices.find(d => d.id === store.tvId);
   const frame = h('div.preview-frame');
   const inner = h('div', { style: { position: 'absolute', top: '0', left: '0', transformOrigin: '0 0' } });
   const iframe = h('iframe', {
-    src: `/d/${board.slug}?preview=1`,
+    src: contentPreviewUrl(board),
     title: 'Board preview',
     scrolling: 'no',
     style: { width: '1920px', height: '1080px', border: '0', display: 'block' }
@@ -68,26 +67,35 @@ function previewCard(board, theme) {
   inner.appendChild(iframe);
   frame.appendChild(inner);
 
-  previewEl = { frame, inner, iframe, slug: board.slug };
+  previewEl = { frame, inner, iframe, theme };
   requestAnimationFrame(() => updatePreviewFrame(theme));
 
   return h('div.card',
     h('div.card-head', h('h2', 'Preview'),
-      h('button.btn.btn-ghost.btn-sm', { onclick: reloadPreview }, 'Refresh')),
+      h('span.hint', tv ? tv.name : 'Preview')),
     h('div.card-body', frame,
-      h('div.hint', 'Shown the way it will look on the wall. Rotation is applied for you.')));
+      h('div.hint', tv ? `${tv.name} · ${ORIENTATIONS[theme.orientation]?.label || 'Landscape'}. Shown upright for editing.` : 'Content preview. Open from a TV to preview its screen orientation.')));
 }
 
 /** Size and counter-rotate the preview so a portrait board reads upright. */
 function updatePreviewFrame(theme) {
   if (!previewEl || !previewEl.frame.isConnected) return;
+  theme = editorPreviewTheme(theme);
+  previewEl.theme = theme;
+  sizePreview(previewEl, theme);
+}
+
+function sizePreview({ frame, inner }, theme) {
   const deg = rotationFor(theme);
-  const { frame, inner } = previewEl;
 
   // The Fire TV signal is always 1920x1080; portrait rotates content inside it.
   const visibleW = deg === 0 ? 1920 : 1080;
   const visibleH = deg === 0 ? 1080 : 1920;
 
+  if (frame.classList.contains('beer-demo-frame')) {
+    const height = Math.max(60, Math.min(innerHeight * 0.52, innerHeight - 270));
+    frame.style.width = `min(100%, ${height * visibleW / visibleH}px)`;
+  }
   frame.style.aspectRatio = `${visibleW} / ${visibleH}`;
   const scale = frame.clientWidth / visibleW;
 
@@ -96,54 +104,107 @@ function updatePreviewFrame(theme) {
   else inner.style.transform = `scale(${scale})`;
 }
 
-function reloadPreview() {
-  if (!previewEl || !previewEl.iframe.isConnected) return;
-  previewEl.iframe.src = `/d/${previewEl.slug}?preview=1&t=${Date.now()}`;
-}
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || !previewEl?.iframe.isConnected ||
+      event.source !== previewEl.iframe.contentWindow || event.data?.type !== 'preview-ready') return;
+  // Apply current unsaved appearance after the preview finishes loading.
+  previewEl.iframe.contentWindow.postMessage({ type: 'preview-theme', theme: previewEl.theme }, location.origin);
+});
 
 window.addEventListener('resize', () => {
-  const board = currentBoard();
-  if (board) updatePreviewFrame(resolveTheme(store.state.settings?.theme, board.theme));
+  if (previewEl?.theme) updatePreviewFrame(previewEl.theme);
 });
+
+function openTransitionPreview(board, theme, effect) {
+  theme = editorPreviewTheme(theme);
+  const title = POSTER_TRANSITIONS[effect].preview;
+  const frame = h('div.preview-frame.beer-demo-frame');
+  const inner = h('div', { style: { position: 'absolute', inset: '0', transformOrigin: '0 0' } });
+  const iframe = h('iframe', { title, scrolling: 'no', tabindex: '-1' });
+  inner.appendChild(iframe); frame.appendChild(inner);
+  const status = h('p.hint', { 'aria-live': 'polite' }, 'Loading your menu…');
+  let ready = false, timeout;
+  const send = data => iframe.contentWindow?.postMessage(data, location.origin);
+  const play = () => {
+    if (!ready) { load(); return; }
+    replay.disabled = true;
+    status.textContent = 'Playing preview…';
+    send({ type: 'preview-theme', theme });
+    send({ type: 'preview-transition', effect });
+  };
+  const replay = h('button.btn.btn-primary', { disabled: true, onclick: play }, 'Play again');
+  const resize = () => sizePreview({ frame, inner }, theme);
+  const receive = event => {
+    if (event.origin !== location.origin || event.source !== iframe.contentWindow) return;
+    if (event.data?.type === 'preview-ready' && !ready) {
+      ready = true; clearTimeout(timeout); resize(); play();
+    } else if (event.data?.type === 'preview-error') {
+      clearTimeout(timeout); ready = false;
+      status.textContent = 'The preview could not load. Check your connection and try again.';
+      replay.disabled = false; replay.textContent = 'Retry preview';
+    } else if (event.data?.type === 'preview-transition-ended' || event.data?.type === 'preview-beer-ended') {
+      replay.disabled = false; replay.textContent = 'Play again';
+      status.textContent = 'Preview finished. Play it again whenever you like.';
+    }
+  };
+  const load = () => {
+    ready = false; replay.disabled = true; status.textContent = 'Loading your menu…';
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      if (ready) return;
+      status.textContent = 'The preview could not load. Check your connection and try again.';
+      replay.disabled = false; replay.textContent = 'Retry preview';
+    }, 12000);
+    iframe.src = contentPreviewUrl(board) + `&t=${Date.now()}`;
+  };
+  window.addEventListener('message', receive);
+  window.addEventListener('resize', resize);
+  const modal = sheet({
+    title, body: h('div', frame, status,
+      h('p.hint', 'A sample poster is used here. Your TVs and saved content stay as they are.')),
+    extra: replay, onSave: null,
+    onClose: () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', receive);
+      window.removeEventListener('resize', resize);
+    }
+  });
+  modal.el.classList.add('beer-demo');
+  resize(); load();
+}
 
 // ------------------------------------------------------------------ cards
 
 function presetCard(theme, set) {
   return h('div.card',
-    h('div.card-head', h('h2', 'Theme')),
+    h('div.card-head', h('h2', '1. Choose a look')),
     h('div.card-body',
       h('div.preset-grid', ...Object.entries(PRESETS).map(([key, p]) =>
         h('button.preset' + (theme.preset === key ? '.on' : ''), {
+          'aria-pressed': theme.preset === key ? 'true' : 'false',
           onclick: () => set({
-            preset: key,
-            // Drop per-colour overrides so the preset actually shows through.
-            bg: '', bgAlt: '', surface: '', text: '', muted: '',
-            accent: '', accentText: '', border: '',
-            headingFont: '', bodyFont: ''
+            ...Object.fromEntries([...new Set(Object.values(PRESETS).flatMap(p => Object.keys(p)))].filter(k => !['label', 'description'].includes(k)).map(k => [k, ''])),
+            preset: key
           }, true)
         },
-          h('div.preset-swatches',
-            h('i', { style: { background: p.bg } }),
-            h('i', { style: { background: p.surface } }),
-            h('i', { style: { background: p.accent } })),
-          h('div.preset-name', p.label)))),
+          h('div.theme-sample', { style: { background: p.bg, color: p.text, fontFamily: FONT_STACKS[p.headingFont], borderColor: p.accent } },
+            h('strong', { style: { color: p.accent } }, 'THE MENU'),
+            h('span', 'House favourites'),
+            h('div', h('span', 'Seasonal special'), h('b', '$12')),
+            h('div', h('span', 'Local favourite'), h('b', '$8'))),
+          h('div.preset-name', p.label + (theme.preset === key ? ' (selected)' : '')),
+          h('p.hint', p.description || 'A signature look for your venue')))),
       h('div.hint', 'Picking a theme resets the colours and fonts below.')));
 }
 
-function layoutCard(theme, set) {
+function layoutCard(theme, set, getTheme) {
   return h('div.card',
-    h('div.card-head', h('h2', 'Layout')),
+    h('div.card-head', h('h2', '2. Adjust the menu')),
     h('div.card-body',
-      field('Orientation',
-        select(theme.orientation || 'landscape',
-          Object.entries(ORIENTATIONS).map(([k, v]) => [k, v.label]),
-          { onchange: (e) => set({ orientation: e.target.value }, true) }),
-        'A Fire TV always sends a landscape picture. If the TV is mounted vertically, ' +
-        'pick a Portrait option and the board is rotated to match.'),
-
+      h('p.hint', 'TV mounted vertically? Set its orientation under TVs > open your TV > Screen setup.'),
       field('Columns',
         select(String(theme.columns ?? 2),
-          [['0', 'Auto'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']],
+          [['0', 'Automatic'], ['1', 'One column'], ['2', 'Two columns'], ['3', 'Three columns'], ['4', 'Four columns']],
           { onchange: (e) => set({ columns: Number(e.target.value) }, true) }),
         'Auto picks a sensible count from the screen shape and how many items you have.'),
 
@@ -156,9 +217,17 @@ function layoutCard(theme, set) {
       slider('Page flip seconds', theme.rotateSeconds, 4, 40, 1, v => set({ rotateSeconds: v }),
         'Only applies when the menu is too long for one screen.'),
 
-      field('Transition',
+      field('Menu page transition',
         select(theme.transition || 'fade', [['fade', 'Fade'], ['slide', 'Slide'], ['none', 'None']],
-          { onchange: (e) => set({ transition: e.target.value }, true) }))));
+          { onchange: (e) => set({ transition: e.target.value }, true) })),
+      currentBoard()?.layout !== 'poster' ? h('div',
+        field('When this menu changes to a poster',
+          select(theme.posterTransition || 'none', Object.entries(POSTER_TRANSITIONS).map(([key, effect]) => [key, effect.label]),
+            { onchange: e => set({ posterTransition: e.target.value }, true) }),
+          'Choose how this menu reveals an event poster: beer, misty glass, or velvet curtains. Only runs from menu to poster; the poster gets its full display time afterward.'),
+        h('div.transition-previews', ...Object.entries(POSTER_TRANSITIONS).filter(([key]) => key !== 'none').map(([key, effect]) =>
+          h('button.btn', { onclick: () => openTransitionPreview(currentBoard(), getTheme(), key) }, effect.button))),
+        h('p.hint', 'Preview uses a sample event poster and plays on request, even when this device reduces motion.')) : null));
 }
 
 function fieldsCard(theme, set) {

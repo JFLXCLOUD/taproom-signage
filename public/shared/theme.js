@@ -68,10 +68,41 @@ export const DEFAULT_THEME = {
   showClock: true,
   showHeader: true,
   showFooter: true,
-  transition: 'fade'   // fade | slide | none
+  transition: 'fade',   // fade | slide | none
+  posterTransition: 'none' // none | beer | ice | curtain; outgoing menu to poster only
 };
 
 export const PRESETS = {
+  bistro: {
+    label: 'Parisian Bistro', description: 'Classic cream, serif headings and fine rules',
+    bg: '#f5efdf', bgAlt: '#e9dfc8', surface: '#fffaf0', text: '#272820', muted: '#62624d',
+    accent: '#365847', accentText: '#ffffff', border: '#c9c1aa', headingFont: 'serif', bodyFont: 'serif',
+    uppercaseHeadings: false, accentBar: false, rowDividers: true, zebra: false, radius: 0, menuStyle: 'bistro'
+  },
+  coastal: {
+    label: 'Coastal', description: 'Airy blue panels with rounded menu rows',
+    bg: '#edf6f7', bgAlt: '#d5e9ed', surface: '#ffffff', text: '#123943', muted: '#486974',
+    accent: '#096e82', accentText: '#ffffff', border: '#b8d4db', headingFont: 'grotesk', bodyFont: 'grotesk',
+    uppercaseHeadings: false, accentBar: false, rowDividers: false, zebra: true, radius: 20, menuStyle: 'coastal'
+  },
+  marquee: {
+    label: 'Marquee', description: 'Bold gold headings for a late-night venue',
+    bg: '#171116', bgAlt: '#30202b', surface: '#241b22', text: '#fff1d6', muted: '#c8ac91',
+    accent: '#edc16e', accentText: '#201519', border: '#70583a', headingFont: 'serif', bodyFont: 'grotesk',
+    uppercaseHeadings: true, accentBar: false, rowDividers: true, zebra: false, radius: 0, menuStyle: 'marquee'
+  },
+  market: {
+    label: 'Fresh Market', description: 'Warm green with framed section headings',
+    bg: '#f0f1e5', bgAlt: '#e0e6ce', surface: '#fafbef', text: '#253b28', muted: '#59694d',
+    accent: '#426b32', accentText: '#ffffff', border: '#bcc8a9', headingFont: 'slab', bodyFont: 'grotesk',
+    uppercaseHeadings: false, accentBar: false, rowDividers: false, zebra: true, radius: 8, menuStyle: 'market'
+  },
+  stadium: {
+    label: 'Stadium', description: 'Big block headings and high-contrast rows',
+    bg: '#101b30', bgAlt: '#172d49', surface: '#1b304b', text: '#f6f8ff', muted: '#aabbd0',
+    accent: '#ffce45', accentText: '#101b30', border: '#3a5270', headingFont: 'condensed', bodyFont: 'mono',
+    uppercaseHeadings: true, accentBar: true, rowDividers: false, zebra: true, radius: 2, menuStyle: 'stadium'
+  },
   midnight: {
     label: 'Midnight',
     bg: '#0b0e13', bgAlt: '#12171f', surface: '#151b24',

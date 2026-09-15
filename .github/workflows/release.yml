@@ -45,13 +45,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '24.16.0'
       - name: Build portable package
-        run: node scripts/build-windows.mjs
+        run: node scripts/build-windows.mjs --setup --release-only
+      - name: Verify installed service
+        shell: powershell
+        run: ./scripts/verify-installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/TaproomSignage-win-x64.zip
+          path: |
+            dist/TaproomSignage-win-x64.zip
+            dist/TaproomSignage-Setup-win-x64.exe
 
   publish:
     name: Publish release
@@ -61,6 +66,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: assets
+      - name: Hash release downloads
+        run: |
+          cd assets
+          sha256sum windows/*.exe windows/*.zip apk/*.apk > SHA256SUMS.txt
       - name: Attach to the release
         uses: softprops/action-gh-release@v2
         with:
@@ -70,3 +79,5 @@ jobs:
           files: |
             assets/apk/TaproomSignage-firetv.apk
             assets/windows/TaproomSignage-win-x64.zip
+            assets/windows/TaproomSignage-Setup-win-x64.exe
+            assets/SHA256SUMS.txt

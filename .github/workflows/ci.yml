@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '24.16.0'
 
       - name: Boot the server and probe it
         run: |
@@ -35,6 +35,23 @@ jobs:
 
       - name: Fire TV app static checks
         run: npm run check:firetv
+
+  windows:
+    name: Install and recover Windows server (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+      - name: Build clean installer and portable package
+        run: node scripts/build-windows.mjs --setup --release-only
+      - name: Verify fresh install, recovery, upgrade and uninstall
+        shell: powershell
+        run: ./scripts/verify-installer.ps1
 
   android:
     name: Build Fire TV APK

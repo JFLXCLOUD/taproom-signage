@@ -13,4 +13,5 @@
     <string name="none">not set</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
+    <string name="invalid_address">Enter the full server address, such as http://192.168.1.20:8099 (no page path). Find it in Taproom Signage on the server PC.</string>
 </resources>
