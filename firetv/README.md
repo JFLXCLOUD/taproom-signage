@@ -1,5 +1,8 @@
 # Taproom Signage — Fire TV app
 
+**[Download the latest APK](https://github.com/JFLXCLOUD/taproom-signage/releases/latest/download/TaproomSignage-firetv.apk)** — this address stays the same across updates.
+[Downloader short-code instructions](../docs/firetv-downloader.md).
+
 A full-screen kiosk for a Fire TV Stick. It finds the signage server on the LAN by
 itself, remembers it, shows the board, and comes back after a power cut.
 

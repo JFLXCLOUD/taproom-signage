@@ -273,6 +273,10 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
 
 ## Fire TV app
 
+**[Download the latest Fire TV APK](https://github.com/JFLXCLOUD/taproom-signage/releases/latest/download/TaproomSignage-firetv.apk)**.
+This permanent address can be used for a reusable Downloader code;
+see [Downloader setup](docs/firetv-downloader.md).
+
 [`firetv/`](firetv/) holds a native Fire TV kiosk app: it finds this server on the LAN
 by itself, remembers it, and restarts on boot — no address is ever typed into a TV.
 `npm run find` runs the same discovery handshake from your laptop, and

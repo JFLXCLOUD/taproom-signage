@@ -35,6 +35,7 @@ jobs:
       - name: Name it properly
         run: |
           mkdir -p out
+          # Keep this name stable: Downloader codes use releases/latest/download.
           cp firetv/app/build/outputs/apk/debug/app-debug.apk out/TaproomSignage-firetv.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -80,8 +81,23 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
+          make_latest: "true"
+          fail_on_unmatched_files: true
           files: |
             assets/apk/TaproomSignage-firetv.apk
             assets/windows/TaproomSignage-win-x64.zip
             assets/windows/TaproomSignage-Setup-win-x64.exe
             assets/SHA256SUMS.txt
+      - name: Verify permanent Fire TV download URL
+        run: |
+          for attempt in {1..10}; do
+            if curl --fail --silent --show-error --location --connect-timeout 10 --max-time 60 \
+              "https://github.com/${{ github.repository }}/releases/latest/download/TaproomSignage-firetv.apk" \
+              --output verified-firetv.apk && cmp --silent assets/apk/TaproomSignage-firetv.apk verified-firetv.apk; then
+              echo "Permanent APK URL serves this release's APK."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Permanent APK URL did not resolve to this release's APK."
+          exit 1
