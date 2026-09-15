@@ -18,21 +18,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reuse the released player when native sources are unchanged
+        id: player
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(gh release view --json tagName --jq .tagName)
+          if git diff --quiet "$previous" HEAD -- firetv/app firetv/build.gradle.kts firetv/settings.gradle.kts firetv/gradle.properties; then
+            mkdir -p out previous-release
+            gh release download "$previous" --pattern TaproomSignage-firetv.apk --dir out
+            gh release download "$previous" --pattern SHA256SUMS.txt --dir previous-release
+            expected=$(awk '$2 ~ /(^|\/)TaproomSignage-firetv.apk$/ {print $1}' previous-release/SHA256SUMS.txt)
+            [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]
+            echo "$expected  out/TaproomSignage-firetv.apk" | sha256sum --check
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing verified player from $previous; native sources have not changed."
+          fi
       - uses: actions/setup-java@v4
+        if: steps.player.outputs.reuse != 'true'
         with:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        if: steps.player.outputs.reuse != 'true'
         with:
           packages: 'platform-tools'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.player.outputs.reuse != 'true'
         with:
           gradle-version: '8.9'
       - name: assembleDebug
+        if: steps.player.outputs.reuse != 'true'
         working-directory: firetv
         run: gradle assembleDebug --no-daemon --stacktrace
       - name: Name it properly
+        if: steps.player.outputs.reuse != 'true'
         run: |
           mkdir -p out
           # Keep this name stable: Downloader codes use releases/latest/download.

@@ -224,10 +224,12 @@ function layoutCard(theme, set, getTheme) {
         field('When this menu changes to a poster',
           select(theme.posterTransition || 'none', Object.entries(POSTER_TRANSITIONS).map(([key, effect]) => [key, effect.label]),
             { onchange: e => set({ posterTransition: e.target.value }, true) }),
-          'Choose how this menu reveals an event poster: beer, misty glass, or velvet curtains. Only runs from menu to poster; the poster gets its full display time afterward.'),
+          'Plays only from menu to poster. The poster gets its full display time afterward.'),
+        h('p.transition-preview-label', 'Try an effect'),
         h('div.transition-previews', ...Object.entries(POSTER_TRANSITIONS).filter(([key]) => key !== 'none').map(([key, effect]) =>
-          h('button.btn', { onclick: () => openTransitionPreview(currentBoard(), getTheme(), key) }, effect.button))),
-        h('p.hint', 'Preview uses a sample event poster and plays on request, even when this device reduces motion.')) : null));
+          h('button.btn', { 'aria-label': effect.button, title: effect.button, onclick: () => openTransitionPreview(currentBoard(), getTheme(), key) },
+            h('span.transition-play', { 'aria-hidden': 'true' }, '▶'), effect.short))),
+        h('p.hint', 'Previews use a sample poster and don’t change your TVs.')) : null));
 }
 
 function fieldsCard(theme, set) {

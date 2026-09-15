@@ -44,11 +44,18 @@ then **Save appearance**. Each effect has a preview button that does not save ch
 - **Beer fill & drain:** photographic beer, foam and splashes fill the panel, then drain (about 6 seconds).
 - **Ice-cold glass:** condensation fogs the screen, droplets slide down, then a clearing sweep reveals the poster (about 4.7 seconds).
 - **Stage curtain:** shaded red velvet curtains close, pause, then open onto the poster (about 4.3 seconds).
+- **Smoke reveal:** layers of rolling smoke cover the menu, then drift upward and dissipate (about 5 seconds).
+- **Whiskey swirl:** amber liquid swirls across the screen and opens outward to reveal the poster (about 4.9 seconds).
+- **Champagne fizz:** golden champagne fills with rising bubbles, then lifts away from the poster (about 5 seconds).
+
+The **Try an effect** buttons use compact labels and play icons. They retain full
+accessible names and larger touch targets on touchscreens. Previewing does not
+select or save an effect; choose it in the list and **Save appearance** to apply it.
 
 Effects run only from menu to poster and preserve the poster's full display duration.
 Both portrait directions work. Reduced-motion preferences skip automatic transitions;
 explicit preview requests still play. TV-context previews use that TV's orientation.
-The effects are local Canvas animations with no remote assets required for ice or curtains.
+The effects are local Canvas animations; smoke, whiskey, champagne, ice, and curtains need no remote assets.
 Physical TV smoothness still needs hardware testing.
 
 [Screenshots and validation notes](docs/ui-review/README.md).

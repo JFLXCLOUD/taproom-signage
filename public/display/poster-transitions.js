@@ -1,7 +1,10 @@
 import { pourBeer } from './beer-transition.js';
 import { iceRenderer, curtainRenderer } from './glass-curtain.js';
+import { smokeRenderer, whiskeyRenderer, champagneRenderer } from './atmosphere-drinks.js';
 import { rotationFor } from '../shared/theme.js';
 import { POSTER_TRANSITIONS } from '../shared/transitions.js';
+
+const renderers = { ice: iceRenderer, curtain: curtainRenderer, smoke: smokeRenderer, whiskey: whiskeyRenderer, champagne: champagneRenderer };
 
 export function posterTransitionFor(previous, next) {
   const key = previous?.theme?.posterTransition;
@@ -11,7 +14,7 @@ export function posterTransitionFor(previous, next) {
 
 export function runPosterTransition(key, theme, reveal, { preview = false } = {}) {
   if (key === 'beer') return pourBeer(theme, reveal, { preview });
-  if (!['ice', 'curtain'].includes(key) || (!preview && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+  if (!Object.prototype.hasOwnProperty.call(renderers, key) || (!preview && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
     reveal(); return { finished: Promise.resolve(), cancel() {} };
   }
   const overlay = document.createElement('div');
@@ -28,7 +31,7 @@ export function runPosterTransition(key, theme, reveal, { preview = false } = {}
     const ratio = rotation ? innerHeight / innerWidth : innerWidth / innerHeight;
     canvas.width = Math.round(Math.min(1080, Math.sqrt(580000 * ratio)));
     canvas.height = Math.round(canvas.width / ratio);
-    const effect = (key === 'ice' ? iceRenderer : curtainRenderer)(canvas);
+    const effect = renderers[key](canvas);
     let start, last = -100;
     const tick = now => {
       if (cancelled) return;

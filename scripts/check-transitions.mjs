@@ -3,8 +3,24 @@ import path from 'node:path';
 import { posterTransitionFor } from '../public/display/poster-transitions.js';
 
 export async function checkTransitions({ browser, base, request, menu, controlPage: control, artifacts }) {
+  // Compact labels remain readable, keyboard reachable, and inside the page.
+  for (const width of [320, 390, 768, 1440]) {
+    await control.setViewportSize({ width, height: 900 });
+    const grid = control.locator('.transition-previews');
+    await grid.scrollIntoViewIfNeeded();
+    const boxes = await grid.locator('button').evaluateAll(buttons => buttons.map(b => {
+      const r = b.getBoundingClientRect(), style = getComputedStyle(b);
+      return { left: r.left, right: r.right, height: r.height, font: parseFloat(style.fontSize), clipped: b.scrollWidth > b.clientWidth + 1, name: b.getAttribute('aria-label') };
+    }));
+    assert.equal(boxes.length, 6);
+    assert.ok(boxes.every(b => b.left >= 0 && b.right <= width && b.height >= 36 && b.height <= 44 && b.font <= 12 && !b.clipped && b.name.startsWith('Preview ')));
+    await control.screenshot({ path: path.join(artifacts, `transition-buttons-${width}.png`) });
+  }
+  await control.getByRole('button', { name: 'Preview smoke reveal', exact: true }).focus();
+  await control.keyboard.press('Enter');
+  await control.getByRole('dialog', { name: 'Smoke reveal preview' }).getByRole('button', { name: 'Close', exact: true }).click();
   const poster = { board: { layout: 'poster' } };
-  for (const effect of ['beer', 'ice', 'curtain']) {
+  for (const effect of ['beer', 'ice', 'curtain', 'smoke', 'whiskey', 'champagne']) {
     const source = { board: { layout: 'grid' }, theme: { posterTransition: effect } };
     assert.equal(posterTransitionFor(source, poster), effect);
     for (const [from, to] of [[poster, source], [poster, poster], [source, source], [null, poster]]) assert.equal(posterTransitionFor(from, to), 'none');
@@ -15,7 +31,10 @@ export async function checkTransitions({ browser, base, request, menu, controlPa
   for (const board_id of [menu.id, event.id]) await request(`/api/playlists/${playlist.id}/items`, { board_id, seconds: 5 });
   for (const [effect, title, button] of [
     ['ice', 'Ice-cold glass preview', 'Preview ice-cold glass'],
-    ['curtain', 'Stage curtain preview', 'Preview stage curtain']
+    ['curtain', 'Stage curtain preview', 'Preview stage curtain'],
+    ['smoke', 'Smoke reveal preview', 'Preview smoke reveal'],
+    ['whiskey', 'Whiskey swirl preview', 'Preview whiskey swirl'],
+    ['champagne', 'Champagne fizz preview', 'Preview champagne fizz']
   ]) {
     await control.getByLabel('When this menu changes to a poster', { exact: true }).selectOption(effect);
     await control.getByRole('button', { name: 'Save appearance', exact: true }).click();
@@ -65,7 +84,7 @@ export async function checkTransitions({ browser, base, request, menu, controlPa
     console.log('PASS: ' + effect + ' save, real rotation, opaque swap, poster timing, mobile/desktop preview and reduced-motion explicit replay');
   }
   const page = await browser.newPage(); await page.goto(base + '/d/main?preview=1', { waitUntil: 'domcontentloaded' });
-  for (const key of ['ice', 'curtain']) for (const orientation of ['portrait', 'portraitLeft']) {
+  for (const key of ['ice', 'curtain', 'smoke', 'whiskey', 'champagne']) for (const orientation of ['portrait', 'portraitLeft']) {
     assert.equal(await page.evaluate(async ({ key, orientation }) => {
       const { runPosterTransition } = await import('/display/poster-transitions.js');
       let covered = false;
@@ -78,7 +97,7 @@ export async function checkTransitions({ browser, base, request, menu, controlPa
     }, { key, orientation }), true, key + ' portrait coverage');
   }
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const key of ['ice', 'curtain']) {
+  for (const key of ['ice', 'curtain', 'smoke', 'whiskey', 'champagne']) {
     assert.equal(await page.evaluate(async key => {
       const { runPosterTransition } = await import('/display/poster-transitions.js');
       let calls = 0; await runPosterTransition(key, {}, () => calls++).finished;

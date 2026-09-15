@@ -27,7 +27,7 @@ same request. Show on TV assigns existing content transactionally to selected TV
 The nullable devices.orientation column preserves existing behavior until a TV-specific setting
 is saved. Device payloads override orientation for every scene without changing shared themes.
 The read-only device preview endpoint neither registers a new TV nor updates last_seen.
-PWA cache v13 includes the workspace, navigation, and shared poster expiry modules. No runtime packages were added.
+PWA cache v14 includes the workspace, navigation, poster expiry, and all six transition modules. No runtime packages were added.
 
 ## Verification
 
@@ -50,6 +50,18 @@ Open a menu > Appearance > When this menu changes to a poster > Beer fill & drai
 [Filling](beer-filling.png) / [Full screen](beer-full.png) / [Revealed](beer-revealed.png).
 
 ## Real-device follow-up
+
+The transition catalogue now includes Smoke reveal, Whiskey swirl, and Champagne
+fizz. `node scripts/verify-beer.mjs --transitions` covers all five non-beer effects
+through saved selection, actual menu/poster playback, opaque swaps, full poster
+duration, mobile/desktop preview and replay, both portrait directions, cancellation,
+and reduced motion. The beer-specific harness continues to cover the original effect.
+Compact preview controls are checked at 320, 390, 768, and 1440 pixels, with
+keyboard activation and descriptive accessible names. Touchscreens keep 44px targets.
+
+Smoke and whiskey textures are generated once and reused. Champagne uses prepared
+bubble sprites. All run under the shared canvas resolution/frame-rate cap and need
+no new downloaded media. These are stylized simulations, not recorded footage.
 
 Browser tests do not establish physical phone or Fire TV coverage. Check orientation on the
 mounted TV and animation performance on the intended hardware. Poster dates remain display

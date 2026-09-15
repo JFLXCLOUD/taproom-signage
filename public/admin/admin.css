@@ -436,8 +436,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: var(--ta
 .beer-demo .sheet { max-width: 900px; border-radius: 18px; }
 .beer-demo-frame { max-width: 100%; margin: 0 auto; width: min(100%, 64vh); }
 .beer-demo-frame iframe { pointer-events: none; }
-.transition-previews { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-.transition-previews .btn { white-space: normal; }
+.transition-preview-label { margin: 12px 0 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.transition-previews { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.transition-previews .btn { min-width: 0; min-height: 36px; padding: 6px 8px; gap: 6px; border-radius: 8px; font-size: 12px; line-height: 1.25; font-weight: 500; white-space: normal; }
+.transition-play { flex: 0 0 auto; color: var(--accent); font-size: 9px; }
+@media (max-width: 600px) { .transition-previews { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (pointer: coarse) { .transition-previews .btn { min-height: 44px; } }
 
 /* ---------------------------------------------------------------- screens */
 
