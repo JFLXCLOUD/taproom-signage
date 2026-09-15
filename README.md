@@ -277,6 +277,8 @@ your LAN, or behind Tailscale / a Cloudflare Tunnel if the venue is off-site.
 This permanent address can be used for a reusable Downloader code;
 see [Downloader setup](docs/firetv-downloader.md).
 
+**Downloader code: `8897966`** — enter it in Downloader on the Fire TV and select **Go**.
+
 [`firetv/`](firetv/) holds a native Fire TV kiosk app: it finds this server on the LAN
 by itself, remembers it, and restarts on boot — no address is ever typed into a TV.
 `npm run find` runs the same discovery handshake from your laptop, and

@@ -3,6 +3,9 @@
 **[Download the latest APK](https://github.com/JFLXCLOUD/taproom-signage/releases/latest/download/TaproomSignage-firetv.apk)** — this address stays the same across updates.
 [Downloader short-code instructions](../docs/firetv-downloader.md).
 
+In Downloader on Fire TV, enter **8897966** and select **Go**.
+Short link: [aftv.news/8897966](https://aftv.news/8897966).
+
 A full-screen kiosk for a Fire TV Stick. It finds the signage server on the LAN by
 itself, remembers it, shows the board, and comes back after a power cut.
 

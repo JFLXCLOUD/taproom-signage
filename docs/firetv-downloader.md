@@ -1,5 +1,12 @@
 # Install through Downloader on Fire TV
 
+**Downloader code: `8897966`**
+
+Short link: **[aftv.news/8897966](https://aftv.news/8897966)**.
+
+Open Downloader on your Fire TV, enter **8897966**, and select **Go**. This code
+targets the permanent latest-APK address below, so use the same code after updates.
+
 ## Permanent APK address
 
 Use this address when creating a Downloader short code:
@@ -18,7 +25,7 @@ Each release keeps the asset name `TaproomSignage-firetv.apk`, marks the release
 Latest, and verifies that this permanent address downloads the same APK that was
 built for that release.
 
-## Get a Downloader code
+## How the code was created
 
 1. Open [the official AFTVnews URL shortener](https://go.aftvnews.com/) on your
    phone or computer.
