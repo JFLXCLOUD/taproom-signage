@@ -81,9 +81,21 @@ try {
     Assert (@(Get-NetFirewallRule -Name 'TaproomSignage-HTTP','TaproomSignage-Discovery').Count -eq 2) 'Upgrade duplicated firewall rules.'
     Write-Output 'PASS: repeat installation preserves data/password and repairs the service and firewall.'
 
-    $uninstall = Start-Process -FilePath "$testInstall\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -WindowStyle Hidden -Wait -PassThru
+    $uninstall = Start-Process -FilePath "$testInstall\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="' + $serverHome + '\logs\uninstall.log"') -WindowStyle Hidden -Wait -PassThru
     Assert ($uninstall.ExitCode -eq 0) 'Uninstaller failed.'
-    Assert (-not (Get-Service TaproomSignage -ErrorAction SilentlyContinue)) 'Uninstall left the service.'
+    # SCM deletion can finish shortly after the uninstaller exits. Dispose each
+    # observer so the test itself cannot keep a deleted service handle alive.
+    for ($i = 0; $i -lt 50; $i++) {
+        $remaining = Get-Service TaproomSignage -ErrorAction SilentlyContinue
+        if (-not $remaining) { break }
+        $remaining.Dispose()
+        Start-Sleep -Milliseconds 200
+    }
+    if ($remaining) {
+        Get-Content "$serverHome\logs\uninstall.log" -Tail 60 -ErrorAction SilentlyContinue
+        Get-Content "$serverHome\logs\setup-error.txt" -ErrorAction SilentlyContinue
+        throw 'Uninstall left the service.'
+    }
     Assert (-not (Get-NetFirewallRule -Name 'TaproomSignage-HTTP','TaproomSignage-Discovery' -ErrorAction SilentlyContinue)) 'Uninstall left firewall rules.'
     Assert (Test-Path "$serverHome\data\upgrade-marker.txt") 'Uninstall deleted user data.'
     Write-Output 'PASS: uninstall removes service/firewall and retains data.'

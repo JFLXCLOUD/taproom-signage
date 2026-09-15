@@ -39,6 +39,7 @@ jobs:
   windows:
     name: Install and recover Windows server (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2022, windows-2025]
     runs-on: ${{ matrix.os }}
@@ -65,6 +66,9 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
 
       - uses: gradle/actions/setup-gradle@v4
         with:

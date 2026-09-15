@@ -23,6 +23,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -69,7 +72,8 @@ jobs:
       - name: Hash release downloads
         run: |
           cd assets
-          sha256sum windows/*.exe windows/*.zip apk/*.apk > SHA256SUMS.txt
+          cp windows/* apk/* .
+          sha256sum *.exe *.zip *.apk > SHA256SUMS.txt
       - name: Attach to the release
         uses: softprops/action-gh-release@v2
         with:
