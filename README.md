@@ -1,5 +1,12 @@
 # Taproom Signage
 
+### Automatic installed-server tray icon (1.2.3)
+
+The Windows installer now starts a tray icon automatically and brings it back at
+sign-in. Use it to open the control app, view server addresses and check service
+status. Closing the tray icon leaves the server running. This release includes
+the complete backup/restore fixes from 1.2.2.
+
 ### Menu price increases and mobile saving (1.2.1)
 
 Open a menu and choose **Increase menu prices**. Enter a percentage, choose rounding

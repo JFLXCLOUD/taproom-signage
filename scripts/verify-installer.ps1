@@ -60,6 +60,24 @@ try {
     $configAcl = Get-Acl "$serverHome\settings"
     Assert ($configAcl.AreAccessRulesProtected) 'Password folder inherits public permissions.'
     Write-Output 'PASS: installation, quoted path, LocalService, automatic boot startup, all-interface TCP, UDP discovery and scoped firewall.'
+    & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "$PSScriptRoot\verify-installed-tray.ps1" -Executable "$testInstall\TaproomServer.exe"
+    Assert ($LASTEXITCODE -eq 0) 'Installed tray UI checks failed.'
+
+    $startupPath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $expectedTray = '"' + $testInstall + '\TaproomServer.exe" --tray'
+    Assert ((Get-ItemPropertyValue $startupPath -Name TaproomSignageTray) -eq $expectedTray) 'Installed tray sign-in startup is missing or incorrectly quoted.'
+    $tray = Start-Process -FilePath "$testInstall\TaproomServer.exe" -ArgumentList '--tray' -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 2
+    Assert (-not $tray.HasExited) 'Installed tray exited immediately.'
+    $tray.Refresh()
+    Assert ($tray.MainWindowHandle -eq 0) 'Sign-in tray launch opened a connection window.'
+    $duplicateTray = Start-Process -FilePath "$testInstall\TaproomServer.exe" -ArgumentList '--tray' -WindowStyle Hidden -PassThru
+    Assert ($duplicateTray.WaitForExit(5000)) 'Duplicate tray launch did not exit.'
+    Assert (@(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($tray.Id)" | Where-Object Name -eq 'node.exe').Count -eq 0) 'Tray launched a second server.'
+    Stop-Process -Id $tray.Id -Force
+    Wait-Healthy
+    Assert ((Get-CimInstance Win32_Service -Filter "Name='TaproomSignage'").ProcessId -eq $svc.ProcessId) 'Closing the tray restarted/stopped the service.'
+    Write-Output 'PASS: tray sign-in registration, background startup, singleton, and independence from the server service.'
 
     $node = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($svc.ProcessId)" | Where-Object Name -eq 'node.exe')
     Assert ($node.Count -eq 1) 'Expected exactly one Node child.'
@@ -75,14 +93,22 @@ try {
     Write-Output 'PASS: Node crash recovery and service host crash recovery without orphan listeners.'
 
     Set-Content -LiteralPath "$serverHome\data\upgrade-marker.txt" -Value 'preserve this data'
+    $upgradeTray = Start-Process -FilePath "$testInstall\TaproomServer.exe" -ArgumentList '--tray' -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 1
     Run-Installer
+    Assert ($upgradeTray.WaitForExit(5000)) 'Upgrade did not close the old installed tray.'
+    Assert ((Get-ItemPropertyValue $startupPath -Name TaproomSignageTray) -eq $expectedTray) 'Upgrade lost tray startup.'
     Assert ((Get-Content "$serverHome\data\upgrade-marker.txt") -eq 'preserve this data') 'Upgrade lost user data.'
     Assert ((Get-Content "$serverHome\settings\taproom.config" -Raw).Contains($password)) 'Upgrade lost the password.'
     Assert (@(Get-NetFirewallRule -Name 'TaproomSignage-HTTP','TaproomSignage-Discovery').Count -eq 2) 'Upgrade duplicated firewall rules.'
     Write-Output 'PASS: repeat installation preserves data/password and repairs the service and firewall.'
+    $uninstallTray = Start-Process -FilePath "$testInstall\TaproomServer.exe" -ArgumentList '--tray' -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 1
 
     $uninstall = Start-Process -FilePath "$testInstall\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="' + $serverHome + '\logs\uninstall.log"') -WindowStyle Hidden -Wait -PassThru
     Assert ($uninstall.ExitCode -eq 0) 'Uninstaller failed.'
+    Assert ($uninstallTray.WaitForExit(5000)) 'Uninstall left the tray running.'
+    Assert (-not (Get-ItemProperty -Path $startupPath -Name TaproomSignageTray -ErrorAction SilentlyContinue)) 'Uninstall left tray startup registration.'
     # SCM deletion can finish shortly after the uninstaller exits. Dispose each
     # observer so the test itself cannot keep a deleted service handle alive.
     for ($i = 0; $i -lt 50; $i++) {

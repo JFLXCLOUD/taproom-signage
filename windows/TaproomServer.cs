@@ -30,10 +30,38 @@ namespace Taproom
                 return;
             }
             Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            bool trayOnly = Array.IndexOf(args, "--tray") >= 0;
+            string identity = System.Security.Principal.WindowsIdentity.GetCurrent().User.Value;
+            bool isNew;
+            using (Mutex mutex = new Mutex(true, "Local\\TaproomInstalledTray-" + identity, out isNew)) {
+                if (!isNew) {
+                    if (!trayOnly) {
+                        try { using (EventWaitHandle signal = EventWaitHandle.OpenExisting("Local\\TaproomInstalledShow-" + identity)) signal.Set(); }
+                        catch (WaitHandleCannotBeOpenedException) { }
+                    }
+                    return;
+                }
+                using (EventWaitHandle show = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\TaproomInstalledShow-" + identity))
+                    Application.Run(new InstalledTray(show, !trayOnly));
+            }
+        }
+
+        internal static int ReadPort() {
+            try { int port; return int.TryParse(File.ReadAllText(Path.Combine(Home, "port")).Trim(), out port) && port > 0 && port <= 65535 ? port : 8099; }
+            catch (IOException) { return 8099; }
+            catch (UnauthorizedAccessException) { return 8099; }
+        }
+
+        internal static void OpenControlApp() {
+            Process.Start(new ProcessStartInfo("http://localhost:" + ReadPort() + "/") { UseShellExecute = true });
+        }
+
+        internal static Form ConnectionWindow() {
             Form form = new Form { Text = "Taproom Signage - Connect your TVs", Size = new Size(710, 480), MinimumSize = new Size(570, 420), StartPosition = FormStartPosition.CenterScreen };
             TextBox info = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Segoe UI", 11), BackColor = Color.White };
             FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8) };
-            Func<int> port = delegate { int p; return File.Exists(Path.Combine(Home, "port")) && int.TryParse(File.ReadAllText(Path.Combine(Home, "port")).Trim(), out p) ? p : 8099; };
+            Func<int> port = ReadPort;
             Action refresh = delegate {
                 StringBuilder text = new StringBuilder();
                 try { using (ServiceController service = new ServiceController("TaproomSignage")) text.AppendLine("Server: " + service.Status); }
@@ -52,14 +80,78 @@ namespace Taproom
                 info.Text = text.ToString();
             };
             Button open = new Button { Text = "Open control app", AutoSize = true };
-            open.Click += delegate { Process.Start(new ProcessStartInfo("http://localhost:" + port() + "/") { UseShellExecute = true }); };
+            open.Click += delegate { OpenControlApp(); };
             Button copy = new Button { Text = "Copy connection details", AutoSize = true };
             copy.Click += delegate { Clipboard.SetText(info.Text); };
             Button update = new Button { Text = "Refresh", AutoSize = true };
             update.Click += delegate { refresh(); };
             buttons.Controls.AddRange(new Control[] { open, copy, update });
             form.Controls.Add(info); form.Controls.Add(buttons); refresh();
-            Application.Run(form);
+            return form;
+        }
+    }
+
+    // A per-user UI for the installed service. It never launches a Node process.
+    class InstalledTray : ApplicationContext
+    {
+        readonly NotifyIcon tray;
+        readonly Icon icon;
+        readonly ContextMenuStrip menu;
+        readonly ToolStripMenuItem status;
+        readonly EventWaitHandle show;
+        readonly System.Windows.Forms.Timer timer;
+        Form window;
+        bool exiting;
+        int ticks;
+
+        public InstalledTray(EventWaitHandle show, bool openWindow) {
+            this.show = show;
+            try { icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            catch { icon = (Icon)SystemIcons.Application.Clone(); }
+            if (icon == null) icon = (Icon)SystemIcons.Application.Clone();
+            menu = new ContextMenuStrip();
+            status = new ToolStripMenuItem("Checking server...") { Enabled = false };
+            menu.Items.Add(status);
+            menu.Items.Add("Open control app", null, delegate { ServiceProgram.OpenControlApp(); });
+            menu.Items.Add("Server addresses", null, delegate { ShowDetails(); });
+            menu.Items.Add("Refresh status", null, delegate { RefreshStatus(); });
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Exit tray icon (server keeps running)", null, delegate { ExitThread(); });
+            tray = new NotifyIcon { Icon = icon, ContextMenuStrip = menu, Text = "Taproom Signage", Visible = true };
+            tray.DoubleClick += delegate { ShowDetails(); };
+            timer = new System.Windows.Forms.Timer { Interval = 500 };
+            timer.Tick += delegate {
+                if (show.WaitOne(0)) ShowDetails();
+                if (++ticks % 10 == 0) RefreshStatus();
+            };
+            RefreshStatus(); timer.Start();
+            if (openWindow) ShowDetails();
+        }
+
+        void RefreshStatus() {
+            string state;
+            try { using (ServiceController service = new ServiceController("TaproomSignage")) state = service.Status.ToString(); }
+            catch { state = "Not installed"; }
+            status.Text = "Server: " + state + " (port " + ServiceProgram.ReadPort() + ")";
+            tray.Text = "Taproom Signage - " + state;
+        }
+
+        void ShowDetails() {
+            if (window == null || window.IsDisposed) {
+                window = ServiceProgram.ConnectionWindow();
+                window.FormClosing += delegate(object sender, FormClosingEventArgs e) {
+                    if (!exiting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; window.Hide(); }
+                };
+            }
+            window.Show(); window.WindowState = FormWindowState.Normal; window.Activate();
+        }
+
+        protected override void ExitThreadCore() {
+            exiting = true;
+            timer.Stop(); timer.Dispose();
+            if (window != null) { window.Close(); window.Dispose(); }
+            tray.Visible = false; tray.Dispose(); menu.Dispose(); icon.Dispose();
+            base.ExitThreadCore();
         }
     }
 

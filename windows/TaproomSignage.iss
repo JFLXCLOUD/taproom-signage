@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.2.2"
+  #define AppVersion "1.2.3"
 #endif
 #ifndef PackageDir
   #error PackageDir must point to the clean package staging folder
@@ -31,8 +31,10 @@ Source: "Setup-Server.ps1"; Flags: dontcopy
 [Icons]
 Name: "{group}\Taproom Signage - Connect your TVs"; Filename: "{app}\TaproomServer.exe"
 Name: "{autodesktop}\Taproom Signage"; Filename: "{app}\TaproomServer.exe"
+[Registry]
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TaproomSignageTray"; ValueData: """{app}\TaproomServer.exe"" --tray"; Flags: uninsdeletevalue
 [Run]
-Filename: "{app}\TaproomServer.exe"; Description: "Show server addresses and open the control app"; Flags: postinstall nowait skipifsilent runasoriginaluser
+Filename: "{app}\TaproomServer.exe"; Parameters: "--tray"; Flags: nowait skipifsilent runasoriginaluser
 [Code]
 var
   Settings: TInputQueryWizardPage;

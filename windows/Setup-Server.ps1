@@ -45,6 +45,15 @@ try {
         Stop-Service -Name $serviceName -Force
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
     }
+    # Release the installed tray executable before upgrade/uninstall. Match the
+    # full installation path so a portable instance or another app is untouched.
+    $installedHost = [IO.Path]::GetFullPath((Join-Path $InstallDir 'TaproomServer.exe'))
+    foreach ($trayProcess in @(Get-CimInstance Win32_Process -Filter "Name='TaproomServer.exe'")) {
+        if ($trayProcess.ExecutablePath -and [string]::Equals($trayProcess.ExecutablePath, $installedHost, [StringComparison]::OrdinalIgnoreCase)) {
+            $running = Get-Process -Id $trayProcess.ProcessId -ErrorAction SilentlyContinue
+            if ($running) { Stop-Process -Id $running.Id -Force; [void]$running.WaitForExit(5000); $running.Dispose() }
+        }
+    }
     if ($Action -eq 'Uninstall') {
         if ($service) { Invoke-Sc @('delete', $serviceName) }
         foreach ($ruleName in $ruleNames) { Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule }

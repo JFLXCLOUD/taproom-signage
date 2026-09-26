@@ -81,6 +81,17 @@ port to the public internet.
 
 ## Reboots, settings, upgrades, and backups
 
+Setup starts the installed server's tray icon automatically after an interactive
+installation and registers it for Windows sign-in. Silent installations register
+the icon for the next sign-in. Windows may place it under the notification area's
+overflow arrow; you can choose to show it on the taskbar in Windows settings.
+Double-click the icon for server addresses, or right-click to open the control app
+and see service status. Closing the connection window returns it to the tray.
+**Exit tray icon** closes only the icon; the server continues running.
+
+The icon controls the installed service and does not start another server instance.
+Keep the old portable app closed once you have switched to the installed server.
+
 - The **Taproom Signage Server** Windows service uses the restricted LocalService
   account and automatic delayed startup. It starts without anybody signing in,
   retries a crashed Node process, and Windows restarts a failed service host.
