@@ -299,39 +299,72 @@ export function renderSettings() {
     h('div.card', h('div.card-body', field('Venue name', venue), field('Tagline', tagline, 'A short line below your venue name.'), field('Currency symbol', currency),
       logoPreview, h('div.row-btns', upload, h('button.btn', { onclick: () => { logo = null; draw(); markDirty(); } }, 'Remove logo')))),
     h('details.advanced', h('summary', 'App tools & backups'),
-      h('div.row-btns', h('a.btn', { href: '/api/export', download: '' }, 'Download backup'), h('button.btn', { onclick: importBackup }, 'Restore backup')),
-      h('p.hint', 'Backups include menus and posters. Uploaded images must be backed up separately.'),
+      h('div.row-btns', h('button.btn', { onclick: downloadBackup }, 'Download backup'), h('button.btn', { onclick: importBackup }, 'Restore backup')),
+      h('p.hint', 'Backups include menus, poster artwork, uploaded images, rotations, venue settings and TV assignments. Server password and port stay unchanged.'),
       h('details.advanced', h('summary', 'Saved rotations'), rotationsCard()),
       h('button.btn', { onclick: async () => { if (document.querySelector('.shell[data-dirty=true]') && !confirm('Discard unsaved venue details and sign out?')) return; clearDirty(); await api.post('/api/auth/logout'); location.reload(); } }, 'Sign out')));
 }
 
+async function downloadBackup(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/export', { cache: 'no-store' });
+    if (!response.ok) throw new Error((await response.json()).error || 'Could not create backup.');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = h('a', { href: url, download: `taproom-backup-${new Date().toISOString().slice(0,10)}.json` });
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Backup downloaded, including images.');
+  } catch (err) { toast(err.message, true); }
+  finally { button.disabled = false; }
+}
+
 function importBackup() {
-  const picker = h('input', { type: 'file', accept: 'application/json,.json', style: { display: 'none' } });
-  let replace = false;
-
-  const body = h('div',
-    h('p.hint', { style: { marginTop: '0' } },
-      'Choose a backup file. Boards are added to what you already have unless you replace everything.'),
-    h('div', { style: { margin: '10px 0' } },
-      h('label.toggle',
-        h('input', { type: 'checkbox', onchange: (e) => { replace = e.target.checked; } }),
-        h('span.track'),
-        h('span.lbl', 'Delete existing boards first'))),
-    h('button.btn.btn-block', { onclick: () => picker.click() }, 'Choose file…'),
-    picker);
-
-  const s = sheet({ title: 'Restore backup', body, saveLabel: null, onSave: null });
-
+  let data = null, preview = null;
+  const picker = input({ type: 'file', accept: 'application/json,.json' });
+  const mode = select('append', [['append', 'Add content to this server'], ['replace', 'Replace this server with the backup']]);
+  const review = h('div', { 'aria-live': 'polite' });
+  const confirm = h('input', { type: 'checkbox' });
+  const confirmation = h('label.toggle', { hidden: true }, confirm, h('span.track'), h('span.lbl', 'Replace current menus, settings and TV assignments with this backup'));
+  const reset = () => { preview = null; review.replaceChildren(); confirm.checked = false; confirmation.hidden = true; save.textContent = 'Review backup'; };
+  const modal = sheet({
+    title: 'Restore backup', saveLabel: 'Review backup',
+    body: h('div', h('p.hint', 'Download a backup of this server first. Choose a file and review it before restoring. Password and port do not change. TVs using a different server address must be pointed here.'),
+      field('Backup file', picker, 'Up to 128 MB, with up to 64 MB of images.'), field('Restore mode', mode), review, confirmation),
+    onSave: async () => {
+      if (!data) { toast('Choose a backup file first.', true); return false; }
+      picker.disabled = mode.disabled = true;
+      try {
+        if (!preview) {
+          preview = await api.post('/api/import', { ...data, mode: mode.value, replace: mode.value === 'replace', preview: true });
+          review.replaceChildren(h('p', `${preview.menus} menus, ${preview.posters} posters, ${preview.items} items, ${preview.images} images, ${preview.rotations} rotations and ${preview.tvs} TV assignments.`),
+            ...(preview.warnings || []).map(message => h('p.hint', message)));
+          confirmation.hidden = mode.value !== 'replace';
+          save.textContent = 'Restore now';
+          return false;
+        }
+        if (mode.value === 'replace' && !confirm.checked) { toast('Confirm that you want to replace this server from the backup.', true); return false; }
+        await api.post('/api/import', { ...data, mode: mode.value, replace: mode.value === 'replace', preview: false, expectedRevision: preview.revision });
+        modal.close(); clearDirty();
+        await mutate(async () => {}, 'Backup restored');
+      } catch (err) { reset(); toast(err.message || 'Restore failed. No partial restore was saved.', true); }
+      finally { picker.disabled = mode.disabled = false; }
+      return false;
+    }
+  });
+  const save = modal.el.querySelector('.sheet-foot .btn-primary');
+  mode.addEventListener('change', reset);
   picker.addEventListener('change', async () => {
-    const file = picker.files && picker.files[0];
+    reset(); data = null;
+    const file = picker.files?.[0];
     if (!file) return;
     try {
-      const data = JSON.parse(await file.text());
-      data.replace = replace;
-      await mutate(() => api.post('/api/import', data), 'Backup restored');
-      s.close();
-    } catch (err) {
-      toast(err.message || 'That file could not be read', true);
-    }
+      if (file.size > 128 * 1024 * 1024) throw new Error('Choose a backup smaller than 128 MB.');
+      data = JSON.parse(await file.text());
+      if (!data || ![1,2].includes(data.version) || !Array.isArray(data.boards)) throw new Error('Not a supported Taproom backup.');
+      review.replaceChildren(h('p.hint', `${file.name} selected. Review the backup to continue.`));
+    } catch (err) { data = null; toast(err.message || 'Could not read that file.', true); }
   });
 }

@@ -39,6 +39,7 @@ jobs:
       - name: Price adjustment and content workflows
         run: |
           npm run verify:prices
+          npm run verify:backups
           npm run verify:workflows
 
   windows:

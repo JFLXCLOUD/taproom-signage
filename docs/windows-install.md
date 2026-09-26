@@ -94,7 +94,8 @@ port to the public internet.
   `C:\ProgramData\TaproomSignage`: `data` (SQLite + uploads), `logs`, and protected
   `settings\taproom.config`. The data and password are not shipped in downloads.
 - Back up `data` with the service stopped, or use a SQLite-aware backup plus the
-  uploads folder. In-app JSON backups do not include uploaded image files.
+  uploads folder. Version 1.2.2+ in-app JSON backups include uploaded image files
+  as well as content, settings, rotations and TV assignments. Earlier backups omit images.
 - To migrate a portable copy, quit its tray app, disable its sign-in startup,
   stop the installed service in Services, back up both data folders, and copy the
   portable **entire data folder** into ProgramData's `data` folder. Restart the

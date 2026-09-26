@@ -1,6 +1,6 @@
 {
   "name": "taproom-signage",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "Self-hosted digital signage for bar & restaurant menus. Firestick-friendly display + installable admin PWA.",
   "type": "module",
@@ -13,6 +13,7 @@
     "check:firetv": "node scripts/check-firetv.mjs",
     "verify:workflows": "node scripts/verify-workflows.mjs",
     "verify:prices": "node scripts/verify-price-controls.mjs",
+    "verify:backups": "node scripts/verify-backups.mjs",
     "find": "node scripts/find-server.mjs"
   }
 }

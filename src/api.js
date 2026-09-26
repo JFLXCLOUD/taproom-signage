@@ -2,6 +2,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { planPriceIncrease } from './price-adjustment.js';
+import { exportBackup, prepareBackup, restoreBackup, BACKUP_LIMIT } from './backup.js';
 
 import * as store from './db.js';
 import { UPLOAD_DIR, nid } from './db.js';
@@ -480,10 +481,10 @@ export function removeUpload(req, res, { id }) {
 // ------------------------------------------------------------------ backup
 
 export function exportAll(req, res) {
-  const data = { version: 1, exportedAt: new Date().toISOString(), ...store.fullState() };
-  const payload = JSON.stringify(data, null, 2);
+  const payload = exportBackup();
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
     'Content-Disposition': `attachment; filename="signage-backup-${Date.now()}.json"`,
     'Content-Length': Buffer.byteLength(payload)
   });
@@ -491,32 +492,20 @@ export function exportAll(req, res) {
 }
 
 export async function importAll(req, res) {
-  const body = await readJson(req, 32 * 1024 * 1024);
-  if (!body || !Array.isArray(body.boards)) return json(res, 400, { error: 'Not a backup file' });
-
-  if (body.settings) {
-    store.updateSettings({
-      venue_name: body.settings.venue_name,
-      tagline: body.settings.tagline,
-      logo: body.settings.logo,
-      currency: body.settings.currency,
-      theme: body.settings.theme
-    });
+  const body = await readJson(req, BACKUP_LIMIT);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'Not a backup file' });
+  if (body.replace !== undefined && typeof body.replace !== 'boolean') return json(res, 400, { error: 'Invalid restore mode' });
+  const mode = body.mode ?? (body.replace ? 'replace' : 'append');
+  if (body.preview === true) {
+    const plan = prepareBackup(body, mode);
+    return json(res, 200, { ...plan.counts, warnings: plan.warnings, revision: store.getRevision() });
   }
-  if (body.replace) for (const b of store.listBoards()) store.deleteBoard(b.id);
-
-  for (const b of body.boards) {
-    const board = store.createBoard({
-      name: b.name, slug: b.slug, layout: b.layout, theme: b.theme, ticker: b.ticker,
-      skipDefaultSection: true
-    });
-    for (const s of b.sections || []) {
-      const section = store.createSection(board.id, { name: s.name, kind: s.kind, note: s.note, hidden: s.hidden });
-      for (const it of s.items || []) store.createItem(section.id, it);
-    }
+  if (body.expectedRevision !== undefined && body.expectedRevision !== store.getRevision()) {
+    return json(res, 409, { error: 'The server changed. Review the backup again before restoring.' });
   }
+  const result = restoreBackup(body, mode);
   changed();
-  json(res, 200, { ok: true, boards: store.listBoards().length });
+  json(res, 200, result);
 }
 
 export { changed };

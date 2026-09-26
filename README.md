@@ -308,5 +308,21 @@ GitHub Actions builds the APK; physical Fire TV testing is still needed. See its
 
 ## Backup
 
-*Settings → Download backup* gives you a JSON file with every board, section, item and price.
-Restoring can either merge or replace. Images are not included — they live in `DATA_DIR/uploads`.
+Open **Venue > App tools & backups > Download backup** for a complete JSON backup:
+menus, prices, poster text/artwork, uploaded images, venue settings, rotations and
+TV assignments. Server passwords, login sessions and port settings are excluded.
+Backups support up to 128 MB total, including up to 64 MB of images (4 MB each).
+
+Choose **Restore backup**, select a file, and review it before applying:
+
+- **Add content** imports menus/posters and rotations with new IDs. Current venue
+  settings and TV assignments stay unchanged.
+- **Replace this server** restores settings, content and TV assignments together,
+  preserving IDs and links. Download a backup of the destination first. Confirm
+  replacement after reviewing the file. A failed restore leaves current data intact.
+
+Older version-1 backups have no image bytes. They can restore if referenced images
+already exist on this server; otherwise the import is rejected before changing data.
+Download a complete backup from an updated source server when moving to another PC.
+TVs still need to use the destination server's address and port. Existing image files
+are retained on disk during replacement; passwords and ports never change.
