@@ -15,6 +15,7 @@ firetv/local.properties
 firetv/.idea/
 *.apk
 dist/
+.codex-tmp/
 
 # Device-specific and intermediate screenshots stay local.
 docs/ui-review/*.png

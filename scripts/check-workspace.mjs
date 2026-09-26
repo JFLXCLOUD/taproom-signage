@@ -101,6 +101,8 @@ export async function checkWorkspace({ browser, base, request, state, menu, tvs,
   assert.equal(await page.getByLabel('Event title', { exact: true }).inputValue(), 'Trivia night updated');
   await page.getByRole('button', { name: 'Save poster', exact: true }).click();
   await page.waitForFunction(async () => (await (await fetch('/api/state')).json()).boards.find(b => b.name === 'Saturday trivia')?.content.headline === 'Trivia night updated');
+  // The write can reach the server before the editor's refresh finishes.
+  await page.waitForFunction(() => !document.querySelector('.shell[data-dirty=true]'));
   await page.goBack();
   await page.getByRole('heading', { name: 'Posters', exact: true }).waitFor();
 

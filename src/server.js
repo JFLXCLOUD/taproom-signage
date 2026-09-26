@@ -75,6 +75,7 @@ const routes = [
   ['DELETE', '/api/devices/:id',       api.removeDevice,   true],
 
   ['POST',   '/api/boards',            api.createBoard,    true],
+  ['POST',   '/api/boards/:id/increase-prices', api.increaseMenuPrices, true],
   ['PATCH',  '/api/boards/:id',        api.patchBoard,     true],
   ['DELETE', '/api/boards/:id',        api.removeBoard,    true],
   ['POST',   '/api/boards/:id/sections', api.createSection, true],

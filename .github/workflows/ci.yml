@@ -36,6 +36,11 @@ jobs:
       - name: Fire TV app static checks
         run: npm run check:firetv
 
+      - name: Price adjustment and content workflows
+        run: |
+          npm run verify:prices
+          npm run verify:workflows
+
   windows:
     name: Install and recover Windows server (${{ matrix.os }})
     strategy:

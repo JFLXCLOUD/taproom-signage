@@ -36,6 +36,7 @@ export function renderMenu() {
   } });
   return h('div',
     contentHeading(board),
+    h('button.btn', { onclick: () => increasePrices(board), style: { marginBottom: '14px' } }, 'Increase menu prices'),
     field('Find an item to update', search), emptySearch, ...sections,
     h('button.btn.btn-block', { style: { marginTop: '14px' }, onclick: () => addSection(board) },
       icon('plus', 17), 'Add section'),
@@ -49,6 +50,49 @@ export function renderMenu() {
 }
 
 // ------------------------------------------------------------------ posters
+
+function increasePrices(board) {
+  const percent = input({ type: 'number', min: '0.01', max: '1000', step: '0.01', inputmode: 'decimal', placeholder: 'e.g. 10' });
+  const rounding = select('cent', [['cent', 'Nearest cent'], ['nickel', 'Nearest 5 cents'], ['quarter', 'Nearest 25 cents'], ['dollar', 'Nearest dollar']]);
+  const review = h('div', { 'aria-live': 'polite' });
+  let preview = null;
+  const reset = () => { preview = null; review.replaceChildren(); save.textContent = 'Review prices'; };
+  percent.addEventListener('input', reset);
+  rounding.addEventListener('change', reset);
+  const modal = sheet({
+    title: 'Increase prices: ' + board.name,
+    body: h('div', h('p.hint', 'Adjust every numeric price in this menu, including all serving sizes and hidden items. Review the changes before applying. Text prices stay unchanged.'),
+      field('Increase by (%)', percent), field('Round to', rounding, 'Prices will never decrease. Small increases may round to the existing price.'), review),
+    saveLabel: 'Review prices',
+    onSave: async () => {
+      if (!percent.value || !percent.reportValidity()) return false;
+      const options = { percent: Number(percent.value), rounding: rounding.value };
+      percent.disabled = rounding.disabled = true;
+      try {
+        if (!preview) {
+          preview = await api.post(`/api/boards/${board.id}/increase-prices`, { ...options, preview: true });
+          review.replaceChildren(h('p', `${preview.changes.length} prices will change. ${preview.skipped.length} text prices will stay unchanged.`),
+            ...preview.changes.map(change => h('div.price-change', h('span', change.label), h('strong', `${formatAmount(change.before)} → ${formatAmount(change.after)}`))),
+            ...preview.skipped.map(price => h('p.hint', `${price.label}: ${price.amount || '(blank)'} — unchanged`)));
+          save.textContent = preview.changes.length ? 'Apply increase' : 'Review prices';
+          if (!preview.changes.length) preview = null;
+          return false;
+        }
+        await api.post(`/api/boards/${board.id}/increase-prices`, { ...options, token: preview.token });
+        const count = preview.changes.length;
+        // Close after a successful write even if the subsequent refresh fails.
+        modal.close();
+        await mutate(async () => {}, `${count} prices updated`);
+        return false;
+      } catch (err) {
+        reset();
+        toast(err.message || 'Could not update prices. Review them again.', true);
+        return false;
+      } finally { percent.disabled = rounding.disabled = false; }
+    }
+  });
+  const save = modal.el.querySelector('.sheet-foot .btn-primary');
+}
 
 function renderPoster(board) {
   const c = board.content || {};
@@ -86,6 +130,7 @@ function renderPoster(board) {
     } finally { saveButton.disabled = false; }
   } }, 'Save poster');
   return h('div', { oninput: markDirty, onchange: markDirty }, contentHeading(board),
+    h('div.save-bar.appearance-save', h('span.hint', 'Save artwork and text changes to update this poster.'), saveButton),
     h('div.card', h('div.card-head', h('h2', board.name), h('span.status-pill', 'Poster')),
       h('div.card-body', artwork, h('div.row-btns', upload, h('button.btn', { onclick: () => { imageId = null; drawArt(); markDirty(); } }, 'Remove artwork')),
         h('p.hint', 'Artwork and text changes apply together when you save.'),
@@ -93,7 +138,7 @@ function renderPoster(board) {
         removalDateField(removeOn, c.expiryTimeZone),
         h('details.advanced', h('summary', 'Artwork & text placement'),
           field('Text position', align), field('Artwork fit', fit), field('Darken artwork', overlay),
-          toggle('Show venue logo', showLogo, v => { showLogo = v; markDirty(); })), saveButton)),
+          toggle('Show venue logo', showLogo, v => { showLogo = v; markDirty(); })))),
     h('div.row-btns', h('button.btn', { onclick: () => editBoard(board) }, 'Rename or delete'),
       h('button.btn', { onclick: () => window.open(contentPreviewUrl(board), '_blank') }, 'Preview on TV'),
       h('button.btn', { onclick: createBoard }, icon('plus', 17), 'New menu')));

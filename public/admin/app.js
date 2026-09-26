@@ -10,6 +10,9 @@ import { renderDesign } from './view-design.js';
 import { renderScreens, renderSettings } from './view-system.js';
 
 const root = document.getElementById('root');
+const topbarObserver = new ResizeObserver(entries => {
+  document.documentElement.style.setProperty('--topbar-height', `${entries[0].target.getBoundingClientRect().height}px`);
+});
 
 const TABS = [['screens', 'TVs', 'monitor'], ['menus', 'Menus', 'list'], ['posters', 'Posters', 'image']];
 
@@ -23,6 +26,7 @@ function render() {
     return;
   }
   clear(root);
+  topbarObserver.disconnect();
 
   if (store.loading) {
     root.appendChild(h('div.empty', h('p', 'Loading…')));
@@ -46,6 +50,7 @@ function render() {
           'aria-current': activeTab === key ? 'page' : null,
           onclick: () => navigate(key)
         }, h('span.ico', icon(iconName, 22)), label)))));
+  topbarObserver.observe(root.querySelector('.topbar'));
 }
 
 function viewFor(tab) {

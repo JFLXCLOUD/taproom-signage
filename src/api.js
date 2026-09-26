@@ -1,6 +1,7 @@
 import { writeFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, createHash } from 'node:crypto';
+import { planPriceIncrease } from './price-adjustment.js';
 
 import * as store from './db.js';
 import { UPLOAD_DIR, nid } from './db.js';
@@ -285,6 +286,36 @@ export async function patchBoard(req, res, { id }) {
   if (!board) return json(res, 404, { error: 'No such board' });
   changed();
   json(res, 200, { board });
+}
+
+export async function increaseMenuPrices(req, res, { id }) {
+  const body = await readJson(req);
+  try {
+    const result = store.transaction(() => {
+      const board = store.getBoard(id);
+      if (!board || board.layout === 'poster') throw Object.assign(new Error('No such menu'), { status: 404 });
+      const sections = store.listSections(id).map(s => ({ ...s, items: store.listItems(s.id) }));
+      const plan = planPriceIncrease(sections, body.percent, body.rounding);
+      const token = createHash('sha256').update(JSON.stringify({ id, sections, percent: body.percent, rounding: body.rounding })).digest('hex');
+      if (body.preview === true) return { ...plan, token };
+      if (!body.token || body.token !== token) {
+        throw Object.assign(new Error('This menu changed. Review the prices again before applying.'), { status: 409 });
+      }
+      const update = store.db.prepare('UPDATE prices SET amount = ? WHERE id = ?');
+      const touch = store.db.prepare('UPDATE items SET updated_at = ? WHERE id = ?');
+      for (const change of plan.changes) {
+        update.run(change.after, change.id);
+        touch.run(store.now(), change.itemId);
+      }
+      if (plan.changes.length) store.bumpRevision();
+      return { updated: plan.changes.length, skipped: plan.skipped };
+    });
+    if (body.preview !== true && result.updated) changed();
+    json(res, 200, result);
+  } catch (err) {
+    if (err.status || !(err.code || '').startsWith('ERR_SQLITE')) return json(res, err.status || 400, { error: err.message });
+    throw err;
+  }
 }
 
 export function removeBoard(req, res, { id }) {

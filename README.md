@@ -1,5 +1,18 @@
 # Taproom Signage
 
+### Menu price increases and mobile saving (1.2.1)
+
+Open a menu and choose **Increase menu prices**. Enter a percentage, choose rounding
+(nearest cent, 5 cents, 25 cents, or dollar), then **Review prices**. Check the old and
+new amounts before choosing **Apply increase**. All numeric serving-size prices,
+including hidden items, are included; text prices such as “Market price” are listed
+as unchanged. Rounding never lowers an existing price. If someone edits the menu
+after your preview, review it again before applying. The server saves the whole
+increase together and prevents a repeated application of the same preview.
+
+Mobile edit dialogs keep their save controls visible above the keyboard. Poster,
+appearance, and venue pages keep their save bar below the app header while scrolling.
+
 ## Everyday controls
 
 The app has three destinations: **TVs**, **Menus**, and **Posters**.

@@ -178,7 +178,26 @@ export function toast(message, isError) {
 export function sheet({ title, body, saveLabel = 'Save', onSave, extra, onClose }) {
   const backdrop = h('div.sheet-backdrop');
   const previousFocus = document.activeElement;
-  const close = () => { backdrop.remove(); previousFocus?.focus(); onClose?.(); };
+  const viewport = window.visualViewport;
+  const fitViewport = () => {
+    backdrop.style.top = `${viewport?.offsetTop || 0}px`;
+    backdrop.style.height = `${viewport?.height || window.innerHeight}px`;
+  };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    viewport?.removeEventListener('resize', fitViewport);
+    viewport?.removeEventListener('scroll', fitViewport);
+    window.removeEventListener('resize', fitViewport);
+    backdrop.remove();
+    if (!document.querySelector('.sheet-backdrop')) document.body.classList.remove('sheet-open');
+    previousFocus?.focus({ preventScroll: true }); onClose?.();
+  };
+  viewport?.addEventListener('resize', fitViewport);
+  viewport?.addEventListener('scroll', fitViewport);
+  window.addEventListener('resize', fitViewport);
+  fitViewport();
   backdrop.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); close(); }
     if (e.key === 'Tab') {
@@ -214,7 +233,8 @@ export function sheet({ title, body, saveLabel = 'Save', onSave, extra, onClose 
   );
 
   document.body.appendChild(backdrop);
-  backdrop.querySelector('input, button')?.focus();
+  document.body.classList.add('sheet-open');
+  backdrop.querySelector('input, button')?.focus({ preventScroll: true });
   return { close, el: backdrop };
 }
 
