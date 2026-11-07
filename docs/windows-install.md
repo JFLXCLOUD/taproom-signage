@@ -101,6 +101,25 @@ Keep the old portable app closed once you have switched to the installed server.
   the error and retry; they do not silently change the address saved on your TVs.
 - Run Setup again to change the port/password or upgrade. A blank password on
   an existing installation keeps it. Data is retained through upgrades and uninstall.
+- **Direct line for updates (optional).** You can update the server from another
+  PC on the venue network without downloading anything on the server PC. One-time
+  setup: on the managing PC run `node scripts/serve-direct-line-setup.mjs`. On the
+  server PC, open PowerShell with *Run as administrator* and paste the command it
+  prints. This turns on Windows' OpenSSH Server and accepts only that PC's key from
+  the local network. Password sign-in over SSH is turned off. Then, from the
+  managing PC:
+  `node scripts/taproom-remote.mjs status | password | deploy | logs`.
+  `deploy` copies `src/`, `public/` and `package.json` to the installed app. It
+  saves the previous app and database under `ProgramData\TaproomSignage\updates`
+  first and restores them if the server does not come back healthy. Data, password,
+  port and TV pairings are kept. Changes to the tray/service program still need Setup.
+- **Forgot the control app password?** With the direct line, run
+  `node scripts/taproom-remote.mjs password`. Otherwise: On the server PC, either run Setup again and
+  type a new password (10+ characters) on the *Connect your venue* page, or open
+  Notepad **as administrator** and open
+  `C:\ProgramData\TaproomSignage\settings\taproom.config`; the `password=` line is
+  the current password. A new password takes effect when Setup finishes. Phones that
+  are already signed in stay signed in for up to 30 days.
 - App files live in `C:\Program Files\Taproom Signage`. Mutable files are under
   `C:\ProgramData\TaproomSignage`: `data` (SQLite + uploads), `logs`, and protected
   `settings\taproom.config`. The data and password are not shipped in downloads.

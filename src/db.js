@@ -3,6 +3,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { normalizePosterExpiry } from '../public/shared/poster-expiry.js';
+import { TEXT_SCALE_MIN, TEXT_SCALE_MAX } from '../public/shared/theme.js';
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -142,6 +143,10 @@ ensureColumn('boards', 'content', "TEXT NOT NULL DEFAULT '{}'");
 // A screen shows either one board or a rotation; never both.
 ensureColumn('devices', 'playlist_id', 'TEXT REFERENCES playlists(id) ON DELETE SET NULL');
 ensureColumn('devices', 'orientation', 'TEXT');
+// Optional text-size multipliers (NULL = 100%) and a forced column break.
+ensureColumn('sections', 'text_scale', 'REAL');
+ensureColumn('sections', 'new_column', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('items', 'text_scale', 'REAL');
 
 // ---------------------------------------------------------------- helpers
 
@@ -267,30 +272,41 @@ export function deleteBoard(id) {
 
 // ---------------------------------------------------------------- sections
 
+function rowToSection(r) {
+  return r ? { ...r, hidden: !!r.hidden, new_column: !!r.new_column } : null;
+}
+
 export function listSections(boardId) {
-  return q('SELECT * FROM sections WHERE board_id = ? ORDER BY sort').all(boardId);
+  return q('SELECT * FROM sections WHERE board_id = ? ORDER BY sort').all(boardId).map(rowToSection);
+}
+
+export function getSection(id) {
+  return rowToSection(q('SELECT * FROM sections WHERE id = ?').get(id));
 }
 
 export function createSection(boardId, data = {}) {
   const id = nid();
   const maxSort = q('SELECT COALESCE(MAX(sort), -1) AS m FROM sections WHERE board_id = ?').get(boardId).m;
-  q(`INSERT INTO sections (id, board_id, name, kind, note, hidden, sort)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`)
+  q(`INSERT INTO sections (id, board_id, name, kind, note, hidden, sort, text_scale, new_column)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, boardId, data.name || 'New section', data.kind || 'draft', data.note || '',
-         data.hidden ? 1 : 0, maxSort + 1);
+         data.hidden ? 1 : 0, maxSort + 1, scale(data.text_scale), data.new_column ? 1 : 0);
   bumpRevision();
-  return q('SELECT * FROM sections WHERE id = ?').get(id);
+  return getSection(id);
 }
 
 export function updateSection(id, patch) {
   const cur = q('SELECT * FROM sections WHERE id = ?').get(id);
   if (!cur) return null;
-  q('UPDATE sections SET name = ?, kind = ?, note = ?, hidden = ?, sort = ? WHERE id = ?')
+  q(`UPDATE sections SET name = ?, kind = ?, note = ?, hidden = ?, sort = ?, text_scale = ?, new_column = ?
+     WHERE id = ?`)
     .run(patch.name ?? cur.name, patch.kind ?? cur.kind, patch.note ?? cur.note,
          patch.hidden === undefined ? cur.hidden : (patch.hidden ? 1 : 0),
-         patch.sort ?? cur.sort, id);
+         patch.sort ?? cur.sort,
+         patch.text_scale === undefined ? cur.text_scale : scale(patch.text_scale),
+         patch.new_column === undefined ? cur.new_column : (patch.new_column ? 1 : 0), id);
   bumpRevision();
-  return q('SELECT * FROM sections WHERE id = ?').get(id);
+  return getSection(id);
 }
 
 export function deleteSection(id) {
@@ -301,7 +317,7 @@ export function deleteSection(id) {
 // ---------------------------------------------------------------- items
 
 const ITEM_FIELDS = ['tap', 'name', 'style', 'producer', 'origin', 'description',
-                     'abv', 'ibu', 'color', 'image', 'badge', 'status', 'hidden', 'sort'];
+                     'abv', 'ibu', 'color', 'image', 'badge', 'status', 'hidden', 'sort', 'text_scale'];
 
 function rowToItem(r) {
   if (!r) return null;
@@ -320,13 +336,13 @@ export function createItem(sectionId, data = {}) {
   const id = nid();
   const maxSort = q('SELECT COALESCE(MAX(sort), -1) AS m FROM items WHERE section_id = ?').get(sectionId).m;
   q(`INSERT INTO items (id, section_id, tap, name, style, producer, origin, description,
-                        abv, ibu, color, image, badge, status, hidden, sort, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                        abv, ibu, color, image, badge, status, hidden, sort, updated_at, text_scale)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, sectionId,
       str(data.tap), str(data.name) || 'New item', str(data.style), str(data.producer),
       str(data.origin), str(data.description),
       num(data.abv), int(data.ibu), data.color || null, data.image || null,
-      str(data.badge), data.status || 'on', data.hidden ? 1 : 0, maxSort + 1, now());
+      str(data.badge), data.status || 'on', data.hidden ? 1 : 0, maxSort + 1, now(), scale(data.text_scale));
   if (Array.isArray(data.prices)) replacePrices(id, data.prices);
   bumpRevision();
   return getItem(id);
@@ -338,11 +354,13 @@ export function updateItem(id, patch) {
   const next = {};
   for (const f of ITEM_FIELDS) next[f] = patch[f] === undefined ? cur[f] : patch[f];
   q(`UPDATE items SET tap = ?, name = ?, style = ?, producer = ?, origin = ?, description = ?,
-       abv = ?, ibu = ?, color = ?, image = ?, badge = ?, status = ?, hidden = ?, sort = ?, updated_at = ?
+       abv = ?, ibu = ?, color = ?, image = ?, badge = ?, status = ?, hidden = ?, sort = ?, updated_at = ?,
+       text_scale = ?
      WHERE id = ?`)
     .run(str(next.tap), str(next.name), str(next.style), str(next.producer), str(next.origin),
          str(next.description), num(next.abv), int(next.ibu), next.color || null, next.image || null,
-         str(next.badge), next.status || 'on', next.hidden ? 1 : 0, int(next.sort) ?? 0, now(), id);
+         str(next.badge), next.status || 'on', next.hidden ? 1 : 0, int(next.sort) ?? 0, now(),
+         scale(next.text_scale), id);
   if (Array.isArray(patch.prices)) replacePrices(id, patch.prices);
   bumpRevision();
   return getItem(id);
@@ -613,7 +631,7 @@ export function fullState() {
     settings: getSettings(),
     boards: listBoards().map(b => ({
       ...b,
-      sections: listSections(b.id).map(s => ({ ...s, hidden: !!s.hidden, items: listItems(s.id) }))
+      sections: listSections(b.id).map(s => ({ ...s, items: listItems(s.id) }))
     })),
     playlists: listPlaylists(),
     devices: listDevices()
@@ -643,6 +661,7 @@ export function boardPayload(boardId) {
       .filter(s => !s.hidden)
       .map(s => ({
         id: s.id, name: s.name, kind: s.kind, note: s.note,
+        text_scale: s.text_scale, new_column: s.new_column,
         items: listItems(s.id).filter(i => !i.hidden)
       }))
       .filter(s => s.items.length > 0 || s.note)
@@ -660,4 +679,10 @@ function num(v) {
 function int(v) {
   const n = num(v);
   return n === null ? null : Math.round(n);
+}
+/** Text-size multiplier; NULL means "use the menu's size" (100%). */
+function scale(v) {
+  const n = num(v);
+  if (n === null || Math.abs(n - 1) < 1e-9) return null;
+  return Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, n));
 }

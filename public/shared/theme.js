@@ -22,6 +22,40 @@ export const WEBFONT_FAMILIES = {
   marker:    'Permanent+Marker'
 };
 
+/**
+ * Every adjustable piece of text on a board: [theme key, CSS variable, label, group].
+ * The display multiplies each element's base size by its variable, so one
+ * slider per row is all the control app needs to offer.
+ */
+export const TEXT_SIZES = {
+  menu: [
+    ['sizeVenue',      '--fs-venue',       'Venue name', 'Header'],
+    ['sizeTagline',    '--fs-tagline',     'Tagline under the venue name', 'Header'],
+    ['sizeClock',      '--fs-clock',       'Clock', 'Header'],
+    ['sizeBoardName',  '--fs-board-name',  'Menu name (top right)', 'Header'],
+    ['sizeSection',    '--fs-section',     'Section headings', 'Sections'],
+    ['sizeNote',       '--fs-note',        'Section notes', 'Sections'],
+    ['sizeTap',        '--fs-tap',         'Tap numbers', 'Items'],
+    ['sizeName',       '--fs-name',        'Item names', 'Items'],
+    ['sizeSub',        '--fs-sub',         'Style & producer line', 'Items'],
+    ['sizeMeta',       '--fs-meta',        'Origin, ABV, IBU & availability tags', 'Items'],
+    ['sizeDesc',       '--fs-desc',        'Descriptions', 'Items'],
+    ['sizePrice',      '--fs-price',       'Prices', 'Prices'],
+    ['sizePriceLabel', '--fs-price-label', 'Serving sizes (Glass, Bottle, Pint…)', 'Prices'],
+    ['sizeTicker',     '--fs-ticker',      'Scrolling message', 'Footer']
+  ],
+  poster: [
+    ['sizePosterEyebrow',  '--fs-poster-eyebrow',  'Date or short announcement', 'Poster text'],
+    ['sizePosterHeadline', '--fs-poster-headline', 'Event title', 'Poster text'],
+    ['sizePosterSub',      '--fs-poster-sub',      'Time, location or entry details', 'Poster text'],
+    ['sizePosterBody',     '--fs-poster-body',     'Extra details', 'Poster text']
+  ]
+};
+
+function textSizeKeys() {
+  return [...TEXT_SIZES.menu, ...TEXT_SIZES.poster].map(([key]) => key);
+}
+
 export const DEFAULT_THEME = {
   preset: 'midnight',
 
@@ -63,14 +97,30 @@ export const DEFAULT_THEME = {
   showImages: false,
   showColorSwatch: true,
 
+  showProducer: true,
+
   // behaviour
   rotateSeconds: 12,   // page rotation when content overflows
   showClock: true,
   showHeader: true,
   showFooter: true,
   transition: 'fade',   // fade | slide | none
-  posterTransition: 'none' // none | beer | ice | curtain; outgoing menu to poster only
+  posterTransition: 'none', // none | beer | ice | curtain; outgoing menu to poster only
+
+  // Per-element text sizes (1 = 100%), multiplied by the overall `density`.
+  ...Object.fromEntries(textSizeKeys().map(k => [k, 1]))
 };
+
+export const TEXT_SCALE_MIN = 0.4;
+export const TEXT_SCALE_MAX = 3;
+
+/** A usable size multiplier, or `fallback` for blank/invalid input. */
+export function textScale(value, fallback = 1) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, n));
+}
 
 export const PRESETS = {
   bistro: {
@@ -203,7 +253,10 @@ export function resolveTheme(globalTheme, boardTheme) {
 
 /** Turn a resolved theme into the CSS custom properties the display consumes. */
 export function themeToCssVars(t) {
+  const sizes = {};
+  for (const [key, cssVar] of [...TEXT_SIZES.menu, ...TEXT_SIZES.poster]) sizes[cssVar] = String(textScale(t[key]));
   return {
+    ...sizes,
     '--bg': t.bg,
     '--bg-alt': t.bgAlt,
     '--surface': t.surface,

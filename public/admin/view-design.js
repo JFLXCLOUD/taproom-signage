@@ -3,7 +3,7 @@ import {
 } from './core.js';
 import { assignedTo } from './view-home.js';
 import { editorHeader, navigate, editorPreviewTheme, contentPreviewUrl } from './navigation.js';
-import { PRESETS, FONT_STACKS, ORIENTATIONS, resolveTheme, rotationFor } from '../shared/theme.js';
+import { PRESETS, FONT_STACKS, ORIENTATIONS, TEXT_SIZES, resolveTheme, rotationFor, textScale } from '../shared/theme.js';
 import { POSTER_TRANSITIONS } from '../shared/transitions.js';
 
 const FONT_LABELS = {
@@ -48,6 +48,7 @@ export function renderDesign() {
     h('div.appearance-workspace',
       h('div.appearance-preview', previewCard(board, theme), h('p.hint', 'Try a theme below. Your TVs change only when you save.')),
       h('div', presets, board.layout === 'poster' ? h('p.hint', 'To change artwork fit or text placement, return to Artwork & text.') : layoutCard(theme, set, () => theme),
+        sizesCard(board.layout === 'poster' ? 'poster' : 'menu', theme, set),
         h('details.advanced', h('summary', 'More appearance options'), custom))));
 }
 
@@ -208,8 +209,8 @@ function layoutCard(theme, set, getTheme) {
           { onchange: (e) => set({ columns: Number(e.target.value) }, true) }),
         'Auto picks a sensible count from the screen shape and how many items you have.'),
 
-      slider('Text size', theme.density, 0.7, 1.5, 0.05, v => set({ density: v }),
-        'Bigger text means fewer items per page and more page flips.'),
+      slider('Overall text size', theme.density, 0.7, 1.5, 0.05, v => set({ density: v }),
+        'Bigger text means fewer items per page and more page flips. Fine-tune each part of the menu under Text sizes.'),
 
       slider('Edge margin', theme.safeArea, 0, 6, 0.2, v => set({ safeArea: v }),
         'Increase if your TV crops the edges (overscan).'),
@@ -236,6 +237,7 @@ function fieldsCard(theme, set) {
   const rows = [
     ['showTapNumbers', 'Tap numbers'],
     ['showStyle', 'Style (e.g. Double IPA)'],
+    ['showProducer', 'Producer or brand'],
     ['showAbv', 'ABV'],
     ['showIbu', 'IBU'],
     ['showOrigin', 'Origin'],
@@ -281,6 +283,51 @@ function typeCard(theme, set) {
       toggle('Download fonts from Google', !!theme.webfonts, v => set({ webfonts: v }, true)),
       h('div.hint',
         'Turn this off for a screen with no internet — the board falls back to built-in fonts.')));
+}
+
+/** One size control per piece of text. Each multiplies the overall text size. */
+function sizesCard(kind, theme, set) {
+  const rows = TEXT_SIZES[kind];
+  const controls = rows.map(([key, , label]) => sizeControl(label, textScale(theme[key]), v => set({ [key]: v === 1 ? '' : v })));
+  const reset = h('button.btn.btn-sm', { onclick: () => {
+    controls.forEach(c => c.setValue(1));
+    set(Object.fromEntries(rows.map(([key]) => [key, ''])));
+  } }, 'Reset all');
+  return h('div.card',
+    h('div.card-head', h('h2', (kind === 'poster' ? '2' : '3') + '. Text sizes'), reset),
+    h('div.card-body',
+      h('p.hint', kind === 'poster'
+        ? 'Make any line of the poster bigger or smaller. The event title still shrinks to fit if it is too long.'
+        : 'Make any part of the menu bigger or smaller. 100% is the normal size. Individual sections and items can be resized from Items & prices.'),
+      ...controls.flatMap((c, i) => {
+        const group = rows[i][3];
+        return kind !== 'poster' && group !== rows[i - 1]?.[3] ? [h('h3.size-group', group), c.el] : [c.el];
+      })));
+}
+
+const SIZE_MIN = 0.5, SIZE_MAX = 2.5, SIZE_STEP = 0.05;
+
+function sizeControl(label, value, onchange) {
+  const pct = v => Math.round(v * 100) + '%';
+  const out = h('output.size-value', pct(value));
+  const range = h('input', { type: 'range', min: SIZE_MIN, max: SIZE_MAX, step: SIZE_STEP, value, 'aria-label': label });
+  const apply = (v, notify = true) => {
+    v = Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(v / SIZE_STEP) * SIZE_STEP));
+    v = Number(v.toFixed(2));
+    range.value = v; out.textContent = pct(v);
+    out.classList.toggle('changed', v !== 1);
+    if (notify) onchange(v);
+  };
+  range.addEventListener('input', () => apply(Number(range.value)));
+  const nudge = dir => h('button.btn.btn-sm.size-nudge', {
+    type: 'button', 'aria-label': (dir < 0 ? 'Smaller: ' : 'Bigger: ') + label,
+    onclick: () => apply(Number(range.value) + dir * SIZE_STEP)
+  }, dir < 0 ? '−' : '+');
+  apply(value, false);
+  return {
+    el: h('div.field.size-field', h('label', label, out), h('div.size-row', nudge(-1), range, nudge(1))),
+    setValue: v => apply(v, false)
+  };
 }
 
 function slider(label, value, min, max, step, onchange, hint) {

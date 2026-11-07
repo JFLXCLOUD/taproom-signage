@@ -1,4 +1,4 @@
-import { themeToCssVars, webfontHref, webfontFamilies, rotationFor, resolveTheme, STATUSES } from '../shared/theme.js';
+import { themeToCssVars, webfontHref, webfontFamilies, rotationFor, resolveTheme, STATUSES, textScale } from '../shared/theme.js';
 import { qrSvg } from '../shared/qr.js';
 import { posterTransitionFor, runPosterTransition } from './poster-transitions.js';
 import { POSTER_TRANSITIONS } from '../shared/transitions.js';
@@ -220,15 +220,22 @@ function el(tag, className, text) {
   return n;
 }
 
+/** Per-section and per-item size multipliers, layered on the theme's sizes. */
+function setLocalScale(node, scale) {
+  if (scale !== 1) node.style.setProperty('--local-scale', String(scale));
+}
+
 function buildSectionHeader(section, theme, continued) {
   const head = el('div', 'sec');
+  setLocalScale(head, textScale(section.text_scale));
   head.appendChild(el('span', 'sec-name', continued ? section.name + ' (cont.)' : section.name));
   if (section.note && !continued) head.appendChild(el('span', 'sec-note', section.note));
   return head;
 }
 
-function buildRow(item, theme, currency) {
+function buildRow(item, theme, currency, section) {
   const row = el('div', 'row');
+  setLocalScale(row, textScale(section && section.text_scale) * textScale(item.text_scale));
   if (item.status && item.status !== 'on') row.classList.add('is-' + item.status);
 
   if (theme.accentBar) {
@@ -257,7 +264,7 @@ function buildRow(item, theme, currency) {
   // Style and producer share a line; either one alone still reads fine.
   const subBits = [];
   if (theme.showStyle && item.style) subBits.push(item.style);
-  if (item.producer) subBits.push(item.producer);
+  if (theme.showProducer !== false && item.producer) subBits.push(item.producer);
   if (subBits.length) main.appendChild(el('div', 'row-sub', subBits.join(' · ')));
 
   const meta = el('div', 'row-meta');
@@ -362,6 +369,7 @@ function packPages(blocks, colCount, colHeight, targetHeight, stage, theme, useH
   newPage();
 
   for (const b of blocks) {
+    if (b.breakBefore && col.childNodes.length) advance();
     const before = col.scrollHeight;
     const node = b.build();
     col.appendChild(node);
@@ -434,6 +442,7 @@ function packBalanced(blocks, colCount, colHeight, stage, theme, useHeaders) {
   const pageCount = greedy.pages.length;
   const heights = greedy.heights;
   if (pageCount < 1 || heights.length < 2) return greedy;
+  const breaks = blocks.map(b => !!b.breakBefore);
 
   const tallest = heights.reduce((n, h) => Math.max(n, h), 0);
   let lo = Math.max(tallest, 1);
@@ -443,7 +452,7 @@ function packBalanced(blocks, colCount, colHeight, stage, theme, useHeaders) {
   let best = -1;
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (simulatePages(heights, colCount, mid) <= pageCount) { best = mid; hi = mid - 1; }
+    if (simulatePages(heights, colCount, mid, breaks) <= pageCount) { best = mid; hi = mid - 1; }
     else lo = mid + 1;
   }
 
@@ -457,13 +466,13 @@ function packBalanced(blocks, colCount, colHeight, stage, theme, useHeaders) {
 }
 
 /** How many pages `heights` needs if no column may exceed `target`. */
-function simulatePages(heights, colCount, target) {
+function simulatePages(heights, colCount, target, breaks) {
   let cols = 1;
   let used = 0;
-  for (const h of heights) {
-    if (used > 0 && used + h > target) { cols += 1; used = 0; }
+  heights.forEach((h, i) => {
+    if (used > 0 && ((breaks && breaks[i]) || used + h > target)) { cols += 1; used = 0; }
     used += h;
-  }
+  });
   return Math.ceil(cols / colCount);
 }
 
@@ -690,7 +699,8 @@ function renderPoster(scene) {
   if (text.childNodes.length) poster.appendChild(text);
 
   app.appendChild(poster);
-  fitHeading(poster.querySelector('.poster-headline'), 11, 3.4, 3);
+  const headlineScale = textScale(theme.sizePosterHeadline);
+  fitHeading(poster.querySelector('.poster-headline'), 11 * headlineScale, 3.4 * headlineScale, 3);
 }
 
 // ------------------------------------------------------------------ render
@@ -775,19 +785,21 @@ function layout(data, stage, theme, attempt) {
 
   // Fit the header before measuring the stage: shrinking the venue name onto
   // one line (or growing it onto two) changes how much height is left below.
-  fitHeading(app.querySelector('.head-venue'), 5.4, 2.4, 2);
+  const venueScale = textScale(theme.sizeVenue);
+  fitHeading(app.querySelector('.head-venue'), 5.4 * venueScale, 2.4 * venueScale, 2);
 
   const blocks = [];
   const useHeaders = (data.sections || []).length > 1 ||
                      (data.sections || []).some(s => s.note);
   for (const section of data.sections || []) {
-    const showHeader = useHeaders;
-    if (showHeader) {
+    const first = blocks.length;
+    if (useHeaders) {
       blocks.push({ type: 'sec', sectionRef: section, build: () => buildSectionHeader(section, theme, false) });
     }
     for (const item of section.items || []) {
-      blocks.push({ type: 'row', sectionRef: section, build: () => buildRow(item, theme, currency) });
+      blocks.push({ type: 'row', sectionRef: section, build: () => buildRow(item, theme, currency, section) });
     }
+    if (section.new_column && blocks[first]) blocks[first].breakBefore = true;
   }
 
   if (!blocks.length) {
