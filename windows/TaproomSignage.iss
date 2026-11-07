@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.2.3"
+  #define AppVersion "1.3.0"
 #endif
 #ifndef PackageDir
   #error PackageDir must point to the clean package staging folder

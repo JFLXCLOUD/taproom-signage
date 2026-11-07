@@ -5,11 +5,20 @@ import {
 import { newPoster, pageHeading, assignedTo, navigate, showOnTV, removalDateField } from './view-home.js';
 import { editorHeader, contentPreviewUrl } from './navigation.js';
 import { icon } from './icons.js';
-import { SECTION_KINDS, STATUSES } from '../shared/theme.js';
+import { SECTION_KINDS, STATUSES, textScale } from '../shared/theme.js';
 
 const STATUS_ORDER = ['on', 'low', 'off', 'soon'];
 const AVAILABILITY = { on: 'Available', low: 'Running low', off: 'Sold out', soon: 'Coming soon' };
 let reorderingSection = null;
+
+const SCALE_CHOICES = [0.6, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5];
+
+/** Text-size picker for one section or item. 100% follows the menu's sizes. */
+function scaleSelect(value) {
+  const current = textScale(value);
+  const choices = SCALE_CHOICES.includes(current) ? SCALE_CHOICES : [...SCALE_CHOICES, current].sort((a, b) => a - b);
+  return select(String(current), choices.map(v => [String(v), Math.round(v * 100) + '%' + (v === 1 ? ' (normal)' : '')]));
+}
 
 export function renderMenu() {
   const board = store.state.boards.find(b => b.id === store.boardId);
@@ -36,10 +45,13 @@ export function renderMenu() {
   } });
   return h('div',
     contentHeading(board),
-    h('button.btn', { onclick: () => increasePrices(board), style: { marginBottom: '14px' } }, 'Increase menu prices'),
+    h('div.row-btns', { style: { marginBottom: '14px' } },
+      h('button.btn', { onclick: () => increasePrices(board) }, 'Increase menu prices'),
+      (board.sections || []).length > 1 ? h('button.btn', { onclick: () => arrangeSections(board) }, 'Arrange sections') : null),
     field('Find an item to update', search), emptySearch, ...sections,
-    h('button.btn.btn-block', { style: { marginTop: '14px' }, onclick: () => addSection(board) },
-      icon('plus', 17), 'Add section'),
+    h('div.row-btns', { style: { marginTop: '14px' } },
+      h('button.btn', { onclick: () => addSection(board) }, icon('plus', 17), 'Add section'),
+      (board.sections || []).length > 1 ? h('button.btn', { onclick: () => arrangeSections(board) }, 'Arrange sections') : null),
     h('div.section-title', 'Menu details'),
     h('div.row-btns',
       h('button.btn.btn-sm', { onclick: () => editBoard(board) },
@@ -168,6 +180,55 @@ function sectionCard(board, section) {
         icon('plus', 17), 'Add item')));
 }
 
+/** Move whole sections up or down; the TV fills its columns in this order. */
+function arrangeSections(board) {
+  const list = h('div.arrange-list');
+  const sectionsNow = () => store.state.boards.find(b => b.id === board.id)?.sections || [];
+  let busy = false;
+  const move = async (index, dir) => {
+    if (busy) return;
+    const ids = sectionsNow().map(sec => sec.id);
+    const to = index + dir;
+    if (to < 0 || to >= ids.length) return;
+    [ids[index], ids[to]] = [ids[to], ids[index]];
+    busy = true;
+    list.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      await mutate(() => api.post('/api/reorder', { kind: 'sections', parentId: board.id, ids }), 'Section moved');
+    } finally {
+      busy = false;
+      draw();
+      // Keep keyboard focus with the section that just moved.
+      const buttons = [...(list.children[to]?.querySelectorAll('button') || [])];
+      const preferred = buttons[dir < 0 ? 0 : 1];
+      (preferred && !preferred.disabled ? preferred : buttons[dir < 0 ? 1 : 0])?.focus();
+    }
+  };
+  const draw = () => {
+    const sections = sectionsNow();
+    list.replaceChildren(...sections.map((section, i) => {
+      const count = (section.items || []).length;
+      const details = [count + (count === 1 ? ' item' : ' items')];
+      if (section.hidden) details.push('hidden');
+      if (section.new_column) details.push('starts a new column');
+      if (textScale(section.text_scale) !== 1) details.push(Math.round(textScale(section.text_scale) * 100) + '% text');
+      const label = section.name || 'section';
+      return h('div.arrange-row',
+        h('span.arrange-pos', String(i + 1)),
+        h('div.arrange-name', h('strong', section.name || 'Untitled'), h('span.hint', details.join(' · '))),
+        h('div.arrange-btns',
+          h('button.btn.btn-sm', { onclick: () => move(i, -1), disabled: i === 0, 'aria-label': 'Move ' + label + ' up' }, icon('chevronUp', 16), 'Up'),
+          h('button.btn.btn-sm', { onclick: () => move(i, 1), disabled: i === sections.length - 1, 'aria-label': 'Move ' + label + ' down' }, icon('chevronDown', 16), 'Down')));
+    }));
+  };
+  draw();
+  sheet({
+    title: 'Arrange sections',
+    body: h('div', h('p.hint', 'The TV shows sections in this order, filling each column from top to bottom. Each move saves right away.'), list),
+    onSave: null
+  });
+}
+
 function addSection(board) {
   const name = h('input.input', { value: '', placeholder: 'e.g. On Draft' });
   const kind = select('draft', Object.entries(SECTION_KINDS).map(([k, v]) => [k, v.label]));
@@ -186,7 +247,9 @@ function editSection(board, section) {
   const name = h('input.input', { value: section.name });
   const kind = select(section.kind, Object.entries(SECTION_KINDS).map(([k, v]) => [k, v.label]));
   const note = h('input.input', { value: section.note || '', placeholder: 'Optional line under the heading' });
+  const size = scaleSelect(section.text_scale);
   let hidden = !!section.hidden;
+  let newColumn = !!section.new_column;
 
   const editor = sheet({
     title: 'Edit section',
@@ -194,6 +257,8 @@ function editSection(board, section) {
       field('Name', name),
       field('Type', kind),
       field('Note', note),
+      field('Text size for this section', size, 'Scales the heading and every item in this section, on top of the menu text sizes in Appearance.'),
+      toggle('Start this section at the top of a new column', newColumn, v => { newColumn = v; }),
       toggle('Hide this whole section from the display', hidden, v => { hidden = v; })),
     extra: h('button.btn.btn-danger.btn-sm', {
       onclick: async () => {
@@ -204,7 +269,7 @@ function editSection(board, section) {
     }, 'Delete'),
     onSave: () => mutate(
       () => api.patch('/api/sections/' + section.id,
-        { name: name.value.trim(), kind: kind.value, note: note.value.trim(), hidden }),
+        { name: name.value.trim(), kind: kind.value, note: note.value.trim(), hidden, new_column: newColumn, text_scale: Number(size.value) }),
       'Section saved')
   });
 }
@@ -313,6 +378,13 @@ function editItem(section, item) {
 
   let hidden = !!data.hidden;
 
+  // Items can move to any section of the same menu; they join at the end.
+  const board = store.state.boards.find(b => (b.sections || []).some(s => s.id === section.id));
+  const sectionChoice = board && board.sections.length > 1
+    ? select(section.id, board.sections.map(s => [s.id, s.name || 'Untitled']))
+    : null;
+  const size = scaleSelect(data.text_scale);
+
   const body = h('div',
     h('p.hint', 'Update the name, price, or availability, then save. Other details are optional.'),
     field('Item name', f.name),
@@ -321,6 +393,9 @@ function editItem(section, item) {
       'One price? Leave the size blank.'),
     field('Availability', f.status),
     toggle('Hide this item from the TV', hidden, v => { hidden = v; }),
+    h('details.advanced', h('summary', sectionChoice ? 'Section & text size' : 'Text size'),
+      sectionChoice ? field('Section', sectionChoice, isNew ? null : 'Moving an item places it at the end of that section.') : null,
+      field('Text size on the TV', size, 'Make just this item bigger or smaller than the rest of the menu.')),
     h('details.advanced', h('summary', 'Description, drink details & image'),
       field('Description', f.description),
       h('div.grid3', field('Tap number', f.tap), field('ABV %', f.abv), field('IBU', f.ibu)),
@@ -343,6 +418,7 @@ function editItem(section, item) {
     color: color || null,
     image: image || null,
     hidden,
+    text_scale: Number(size.value),
     prices: priceRows.map(r => ({ label: r.lbl.value.trim(), amount: r.amt.value.trim() }))
   });
 
@@ -359,11 +435,16 @@ function editItem(section, item) {
     onSave: () => {
       const body = payload();
       if (!body.name) { toast('Give the item a name', true); return false; }
-      return mutate(
-        () => isNew
-          ? api.post(`/api/sections/${section.id}/items`, body)
-          : api.patch('/api/items/' + data.id, body),
-        isNew ? 'Item added' : 'Saved');
+      const target = sectionChoice?.value || section.id;
+      const moving = !isNew && target !== section.id;
+      return mutate(async () => {
+        if (isNew) return api.post(`/api/sections/${target}/items`, body);
+        await api.patch('/api/items/' + data.id, body);
+        if (moving) {
+          const dest = board.sections.find(s => s.id === target);
+          await api.post('/api/reorder', { kind: 'items', parentId: target, ids: [...(dest?.items || []).map(i => i.id), data.id] });
+        }
+      }, isNew ? 'Item added' : moving ? 'Saved and moved' : 'Saved');
     }
   });
 }

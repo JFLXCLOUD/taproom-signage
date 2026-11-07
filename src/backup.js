@@ -17,6 +17,7 @@ const integer = (v, fallback = 0) => { const n = number(v, fallback); return n =
 const jsonObject = (v, fallback = {}) => v == null ? fallback : object(v) ? v : fail('Invalid settings or poster content.');
 const bool = v => v === true || v === 1 ? 1 : v === false || v === 0 || v == null ? 0 : fail('Invalid visibility in backup.');
 const id = v => typeof v === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(v) ? v : fail('Invalid record ID in backup.');
+const textScale = v => v == null ? null : typeof v === 'number' && v >= 0.4 && v <= 3 ? v : fail('Invalid text size in backup.');
 const imageId = v => typeof v === 'string' && /^[a-f0-9]{16}\.(png|jpg|webp|gif)$/.test(v) ? v : fail('Invalid image name in backup.');
 
 function readImage(name) {
@@ -109,12 +110,12 @@ export function prepareBackup(body, mode = 'append') {
     for (const s of array(b.sections ?? [], 'sections')) {
       if (!object(s)) fail('Invalid section.');
       const sectionId = recordId('sections', s.id);
-      tables.sections.push({ id: sectionId, board_id: boardId, name: text(s.name), kind: text(s.kind, 'custom'), note: text(s.note), hidden: bool(s.hidden), sort: integer(s.sort) });
+      tables.sections.push({ id: sectionId, board_id: boardId, name: text(s.name), kind: text(s.kind, 'custom'), note: text(s.note), hidden: bool(s.hidden), sort: integer(s.sort), text_scale: textScale(s.text_scale), new_column: bool(s.new_column) });
       for (const item of array(s.items ?? [], 'items')) {
         if (!object(item)) fail('Invalid item.');
         const row = { id: recordId('items', item.id), section_id: sectionId };
         for (const key of ['tap', 'name', 'style', 'producer', 'origin', 'description', 'badge']) row[key] = text(item[key]);
-        Object.assign(row, { abv: number(item.abv, null), ibu: integer(item.ibu, null), color: text(item.color, null), image: imageRef(item.image), status: text(item.status, 'on'), hidden: bool(item.hidden), sort: integer(item.sort), updated_at: integer(item.updated_at) });
+        Object.assign(row, { abv: number(item.abv, null), ibu: integer(item.ibu, null), color: text(item.color, null), image: imageRef(item.image), status: text(item.status, 'on'), hidden: bool(item.hidden), sort: integer(item.sort), updated_at: integer(item.updated_at), text_scale: textScale(item.text_scale) });
         tables.items.push(row);
         for (const p of array(item.prices ?? [], 'prices')) {
           if (!object(p)) fail('Invalid price.');

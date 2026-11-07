@@ -1,5 +1,25 @@
 # Taproom Signage
 
+### Text sizes and section arranging (1.3.0)
+
+- **Text sizes anywhere.** Open a menu's **Appearance** tab. Under **Text sizes**, every
+  part of the board has its own size control: venue name, tagline, clock, menu name,
+  section headings and notes, tap numbers, item names, style/producer line, origin and
+  ABV tags, descriptions, prices, serving sizes and the scrolling message. Posters have
+  controls for each line of text. Use the slider or −/+ (5% steps). The preview updates
+  while you adjust, and TVs change when you save. **Reset all** returns to 100%.
+  **Overall text size** still scales everything together.
+- **Per section and per item.** In **Items & prices**, **Edit section** has a text size
+  for the heading and all of its items. Each item has **Section & text size** to make
+  that item bigger or smaller.
+- **Arrange sections.** Choose **Arrange sections** and move sections up or down. Each
+  move saves right away. Items can move to another section from **Section & text size**.
+- **Column breaks.** **Edit section** > **Start this section at the top of a new column**.
+- **Producer toggle.** **More appearance options** > **What to show** > **Producer or brand**.
+
+Existing menus look the same until you change these settings. Backups include the new
+section and item settings.
+
 ### Automatic installed-server tray icon (1.2.3)
 
 The Windows installer now starts a tray icon automatically and brings it back at

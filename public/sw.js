@@ -5,7 +5,7 @@
 // data must never be served stale — a bartender marking a keg kicked has to see
 // the truth, not a cached copy.
 
-const VERSION = 'v16';
+const VERSION = 'v17';
 const SHELL = 'shell-' + VERSION;
 
 const SHELL_FILES = [
